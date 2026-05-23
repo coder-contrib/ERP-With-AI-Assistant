@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/kpi_card.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import '../../../core/theme/app_theme.dart';
+import 'dashboard_provider.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dashboardAsync = ref.watch(dashboardProvider);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -16,24 +21,26 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(height: 4),
           Text('Welcome back. Here\'s your business overview.', style: TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 24),
-          // KPI Cards
-          GridView.count(
-            crossAxisCount: 5,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 1.6,
-            children: const [
-              KPICard(title: 'Today\'s Sales', value: '\$15,000', icon: Icons.trending_up, color: AppColors.success, trend: '+12% from yesterday'),
-              KPICard(title: 'Monthly Profit', value: '\$52,000', icon: Icons.bar_chart, color: AppColors.primary),
-              KPICard(title: 'Low Stock Items', value: '12', icon: Icons.warning_rounded, color: AppColors.warning),
-              KPICard(title: 'Pending Payments', value: '7', icon: Icons.schedule, color: AppColors.error),
-              KPICard(title: 'Cash Balance', value: '\$30,000', icon: Icons.account_balance_wallet, color: AppColors.info),
-            ],
+          dashboardAsync.when(
+            loading: () => GridView.count(
+              crossAxisCount: 5, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 1.6,
+              children: List.generate(5, (_) => const CardSkeletonLoader()),
+            ),
+            error: (err, _) => Center(child: Text('Error loading dashboard: $err')),
+            data: (summary) => GridView.count(
+              crossAxisCount: 5, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 1.6,
+              children: [
+                KPICard(title: 'Today\'s Sales', value: '\$${summary.todaySales}', icon: Icons.trending_up, color: AppColors.success),
+                KPICard(title: 'Monthly Profit', value: '\$${summary.monthlyProfit}', icon: Icons.bar_chart, color: AppColors.primary),
+                KPICard(title: 'Low Stock Items', value: '${summary.lowStockProducts}', icon: Icons.warning_rounded, color: AppColors.warning),
+                KPICard(title: 'Pending Payments', value: '${summary.pendingPayments}', icon: Icons.schedule, color: AppColors.error),
+                KPICard(title: 'Cash Balance', value: '\$${summary.cashBalance}', icon: Icons.account_balance_wallet, color: AppColors.info),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
-          // Charts placeholder
           Container(
             height: 300,
             decoration: BoxDecoration(
