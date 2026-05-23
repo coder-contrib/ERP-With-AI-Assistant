@@ -225,7 +225,8 @@ CREATE TABLE sales_invoice_items (
     invoice_id INTEGER NOT NULL REFERENCES sales_invoices(invoice_id),
     product_id INTEGER NOT NULL REFERENCES products(product_id),
     sold_quantity DECIMAL(14, 4) NOT NULL,
-    quantity_unit VARCHAR(20) NOT NULL,
+    unit_type VARCHAR(20) NOT NULL CHECK (unit_type IN ('meter', 'piece', 'carton')),
+    conversion_factor_used DECIMAL(10, 4),
     carton_count DECIMAL(10, 2),
     piece_count DECIMAL(10, 2),
     unit_price DECIMAL(12, 2) NOT NULL,
@@ -419,6 +420,7 @@ CREATE INDEX idx_sales_invoices_date ON sales_invoices(invoice_date);
 CREATE INDEX idx_sales_invoices_type ON sales_invoices(invoice_type);
 CREATE INDEX idx_sales_invoices_warehouse ON sales_invoices(warehouse_id);
 CREATE INDEX idx_sales_invoice_items_invoice ON sales_invoice_items(invoice_id);
+CREATE INDEX idx_sales_invoice_items_product ON sales_invoice_items(product_id);
 CREATE INDEX idx_purchase_invoices_supplier ON purchase_invoices(supplier_id);
 CREATE INDEX idx_purchase_invoice_items_invoice ON purchase_invoice_items(purchase_invoice_id);
 CREATE INDEX idx_customer_payments_customer ON customer_payments(customer_id);
