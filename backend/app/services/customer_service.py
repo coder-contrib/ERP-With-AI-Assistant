@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.database import transaction
 from app.repositories.customer_repo import CustomerRepository
 from app.schemas.customers import CustomerCreate, CustomerUpdate
 from app.models.customers import Customer
@@ -20,15 +21,15 @@ class CustomerService:
         return customer
 
     def create(self, data: CustomerCreate) -> Customer:
-        customer = self.repo.create(**data.model_dump())
-        self.db.commit()
+        with transaction(self.db):
+            customer = self.repo.create(**data.model_dump())
         self.db.refresh(customer)
         return customer
 
     def update(self, customer_id: int, data: CustomerUpdate) -> Customer:
-        customer = self.get(customer_id)
-        customer = self.repo.update(customer, **data.model_dump(exclude_unset=True))
-        self.db.commit()
+        with transaction(self.db):
+            customer = self.get(customer_id)
+            customer = self.repo.update(customer, **data.model_dump(exclude_unset=True))
         self.db.refresh(customer)
         return customer
 

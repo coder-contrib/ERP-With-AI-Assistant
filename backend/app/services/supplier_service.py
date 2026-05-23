@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.database import transaction
 from app.repositories.supplier_repo import SupplierRepository
 from app.schemas.suppliers import SupplierCreate, SupplierUpdate
 from app.models.suppliers import Supplier
@@ -20,14 +21,14 @@ class SupplierService:
         return supplier
 
     def create(self, data: SupplierCreate) -> Supplier:
-        supplier = self.repo.create(**data.model_dump())
-        self.db.commit()
+        with transaction(self.db):
+            supplier = self.repo.create(**data.model_dump())
         self.db.refresh(supplier)
         return supplier
 
     def update(self, supplier_id: int, data: SupplierUpdate) -> Supplier:
-        supplier = self.get(supplier_id)
-        supplier = self.repo.update(supplier, **data.model_dump(exclude_unset=True))
-        self.db.commit()
+        with transaction(self.db):
+            supplier = self.get(supplier_id)
+            supplier = self.repo.update(supplier, **data.model_dump(exclude_unset=True))
         self.db.refresh(supplier)
         return supplier

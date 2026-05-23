@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.database import transaction
 from app.repositories.product_repo import ProductRepository
 from app.schemas.products import ProductCreate, ProductUpdate, ConversionCreate
 from app.models.products import Product, ProductUnitConversion
@@ -20,15 +21,15 @@ class ProductService:
         return product
 
     def create(self, data: ProductCreate) -> Product:
-        product = self.repo.create(**data.model_dump())
-        self.db.commit()
+        with transaction(self.db):
+            product = self.repo.create(**data.model_dump())
         self.db.refresh(product)
         return product
 
     def update(self, product_id: int, data: ProductUpdate) -> Product:
-        product = self.get(product_id)
-        product = self.repo.update(product, **data.model_dump(exclude_unset=True))
-        self.db.commit()
+        with transaction(self.db):
+            product = self.get(product_id)
+            product = self.repo.update(product, **data.model_dump(exclude_unset=True))
         self.db.refresh(product)
         return product
 
@@ -37,8 +38,8 @@ class ProductService:
         return self.repo.get_conversions(product_id)
 
     def add_conversion(self, product_id: int, data: ConversionCreate) -> ProductUnitConversion:
-        self.get(product_id)
-        conversion = self.repo.add_conversion(product_id, data.from_unit, data.to_unit, data.factor)
-        self.db.commit()
+        with transaction(self.db):
+            self.get(product_id)
+            conversion = self.repo.add_conversion(product_id, data.from_unit, data.to_unit, data.factor)
         self.db.refresh(conversion)
         return conversion

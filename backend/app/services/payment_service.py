@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from decimal import Decimal
+from app.database import transaction
 from app.repositories.payment_repo import PaymentRepository
 from app.repositories.customer_repo import CustomerRepository
 from app.repositories.supplier_repo import SupplierRepository
@@ -19,48 +20,48 @@ class PaymentService:
         self.ledger = LedgerService(db)
 
     def receive_customer_payment(self, data: CustomerPaymentCreate) -> int:
-        customer = self.customer_repo.get_by_id(data.customer_id)
-        if not customer:
-            raise NotFoundError("Customer not found")
+        with transaction(self.db):
+            customer = self.customer_repo.get_by_id(data.customer_id)
+            if not customer:
+                raise NotFoundError("Customer not found")
 
-        payment = self.payment_repo.create_customer_payment(**data.model_dump())
+            payment = self.payment_repo.create_customer_payment(**data.model_dump())
 
-        self.customer_repo.update_balance(customer, -data.payment_amount)
+            self.customer_repo.update_balance(customer, -data.payment_amount)
 
-        self.cash.record_cash_in(
-            amount=data.payment_amount,
-            entity_type="customer_payment",
-            entity_id=payment.payment_id,
-        )
+            self.cash.record_cash_in(
+                amount=data.payment_amount,
+                entity_type="customer_payment",
+                entity_id=payment.payment_id,
+            )
 
-        self.ledger.record_customer_payment(
-            payment_id=payment.payment_id,
-            amount=data.payment_amount,
-        )
+            self.ledger.record_customer_payment(
+                payment_id=payment.payment_id,
+                amount=data.payment_amount,
+            )
 
-        self.db.commit()
         return payment.payment_id
 
     def make_supplier_payment(self, data: SupplierPaymentCreate) -> int:
-        supplier = self.supplier_repo.get_by_id(data.supplier_id)
-        if not supplier:
-            raise NotFoundError("Supplier not found")
+        with transaction(self.db):
+            supplier = self.supplier_repo.get_by_id(data.supplier_id)
+            if not supplier:
+                raise NotFoundError("Supplier not found")
 
-        payment = self.payment_repo.create_supplier_payment(**data.model_dump())
+            payment = self.payment_repo.create_supplier_payment(**data.model_dump())
 
-        self.supplier_repo.update_balance(supplier, -data.payment_amount)
-        self.supplier_repo.record_payment_date(supplier)
+            self.supplier_repo.update_balance(supplier, -data.payment_amount)
+            self.supplier_repo.record_payment_date(supplier)
 
-        self.cash.record_cash_out(
-            amount=data.payment_amount,
-            entity_type="supplier_payment",
-            entity_id=payment.payment_id,
-        )
+            self.cash.record_cash_out(
+                amount=data.payment_amount,
+                entity_type="supplier_payment",
+                entity_id=payment.payment_id,
+            )
 
-        self.ledger.record_supplier_payment(
-            payment_id=payment.payment_id,
-            amount=data.payment_amount,
-        )
+            self.ledger.record_supplier_payment(
+                payment_id=payment.payment_id,
+                amount=data.payment_amount,
+            )
 
-        self.db.commit()
         return payment.payment_id

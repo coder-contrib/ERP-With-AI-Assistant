@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, DeclarativeBase, Session
+from contextlib import contextmanager
 from app.config import settings
 
 engine = create_engine(settings.database_url)
@@ -16,3 +17,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def transaction(db: Session):
+    """Context manager for atomic transactions.
+    Usage:
+        with transaction(db):
+            # all operations here are atomic
+            # auto-commits on success, auto-rollbacks on exception
+    """
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

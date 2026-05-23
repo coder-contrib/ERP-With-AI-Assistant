@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.database import transaction
 from app.repositories.expense_repo import ExpenseRepository
 from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
@@ -17,20 +18,20 @@ class ExpenseService:
         return self.repo.get_all()
 
     def create(self, data: ExpenseCreate) -> Expense:
-        expense = self.repo.create(**data.model_dump())
+        with transaction(self.db):
+            expense = self.repo.create(**data.model_dump())
 
-        self.cash.record_cash_out(
-            amount=data.amount,
-            entity_type="expense",
-            entity_id=expense.expense_id,
-        )
+            self.cash.record_cash_out(
+                amount=data.amount,
+                entity_type="expense",
+                entity_id=expense.expense_id,
+            )
 
-        self.ledger.record_expense(
-            expense_id=expense.expense_id,
-            amount=data.amount,
-            category=data.expense_category,
-        )
+            self.ledger.record_expense(
+                expense_id=expense.expense_id,
+                amount=data.amount,
+                category=data.expense_category,
+            )
 
-        self.db.commit()
         self.db.refresh(expense)
         return expense

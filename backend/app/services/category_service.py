@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.database import transaction
 from app.repositories.category_repo import CategoryRepository
 from app.schemas.categories import CategoryCreate, CategoryUpdate
 from app.models.categories import Category
@@ -20,20 +21,20 @@ class CategoryService:
         return category
 
     def create(self, data: CategoryCreate) -> Category:
-        category = self.repo.create(**data.model_dump())
-        self.db.commit()
+        with transaction(self.db):
+            category = self.repo.create(**data.model_dump())
         self.db.refresh(category)
         return category
 
     def update(self, category_id: int, data: CategoryUpdate) -> Category:
-        category = self.get(category_id)
-        category = self.repo.update(category, **data.model_dump(exclude_unset=True))
-        self.db.commit()
+        with transaction(self.db):
+            category = self.get(category_id)
+            category = self.repo.update(category, **data.model_dump(exclude_unset=True))
         self.db.refresh(category)
         return category
 
     def delete(self, category_id: int) -> dict:
-        category = self.get(category_id)
-        self.repo.delete(category)
-        self.db.commit()
+        with transaction(self.db):
+            category = self.get(category_id)
+            self.repo.delete(category)
         return {"detail": "Category deleted"}
