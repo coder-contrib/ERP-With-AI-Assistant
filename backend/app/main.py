@@ -4,12 +4,12 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
 from app.events.registry import register_event_handlers
-from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="3.3.0",
-    description="Event-driven ERP system with AI assistant, reports, and notifications",
+    version="3.4.0",
+    description="Event-driven ERP with AI assistant and pgvector semantic search",
 )
 
 app.add_middleware(
@@ -27,6 +27,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI Assistant"])
+app.include_router(embeddings.router, prefix="/api/embeddings", tags=["Embeddings"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
@@ -44,7 +45,7 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["Background Tasks"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "3.3.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "3.4.0"}
 
 
 @app.get("/health")

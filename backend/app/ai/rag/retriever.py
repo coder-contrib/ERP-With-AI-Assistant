@@ -1,25 +1,28 @@
 """RAG (Retrieval-Augmented Generation) module.
-Provides context from ERP data to enhance AI responses.
-
-Future implementation:
-- Product catalog embeddings for semantic search
-- Invoice history for pattern matching
-- Customer interaction summaries
+Uses pgvector for semantic search when embeddings are available,
+falls back to keyword search otherwise.
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.products import Product
 from app.models.customers import Customer
 from app.models.suppliers import Supplier
+from app.repositories.embedding_repo import EmbeddingRepository
 
 
 class ERPContextRetriever:
     """Retrieves relevant ERP context for AI queries.
-    Uses keyword matching now, embeddings later.
+    Uses pgvector semantic search when embeddings exist,
+    keyword matching as fallback.
     """
 
     def __init__(self, db: Session):
         self.db = db
+        self.embedding_repo = EmbeddingRepository(db)
+
+    def semantic_search(self, query_embedding: list[float], limit: int = 5,
+                        source_type: str | None = None) -> list[dict]:
+        return self.embedding_repo.search_similar(query_embedding, limit, source_type)
 
     def search_products(self, query: str, limit: int = 5) -> list[dict]:
         results = self.db.query(Product).filter(
