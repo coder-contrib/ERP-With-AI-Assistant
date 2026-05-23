@@ -1,0 +1,320 @@
+-- ============================================================
+-- Ceramic Showroom ERP Database Structure
+-- PostgreSQL Schema
+-- ============================================================
+
+-- 1. Categories Table
+CREATE TABLE categories (
+    category_id SERIAL PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL,
+    description TEXT
+);
+
+-- 2. Products Table
+CREATE TABLE products (
+    product_id SERIAL PRIMARY KEY,
+    product_name VARCHAR(255) NOT NULL,
+    category_id INTEGER REFERENCES categories(category_id),
+    measurement_type VARCHAR(20) NOT NULL CHECK (measurement_type IN ('meter', 'piece')),
+    purchase_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    selling_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    pieces_per_carton INTEGER,
+    meters_per_carton DECIMAL(10, 4),
+    meters_per_piece DECIMAL(10, 4),
+    barcode VARCHAR(100),
+    product_image TEXT,
+    active_status BOOLEAN NOT NULL DEFAULT TRUE,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 3. Warehouses Table
+CREATE TABLE warehouses (
+    warehouse_id SERIAL PRIMARY KEY,
+    warehouse_name VARCHAR(100) NOT NULL,
+    warehouse_location VARCHAR(255),
+    notes TEXT
+);
+
+-- 4. Inventory Table
+CREATE TABLE inventory (
+    inventory_id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    available_quantity DECIMAL(14, 4) NOT NULL DEFAULT 0,
+    last_updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    UNIQUE (product_id, warehouse_id)
+);
+
+-- 5. Inventory Transactions Table
+CREATE TABLE inventory_transactions (
+    transaction_id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    transaction_type VARCHAR(30) NOT NULL CHECK (transaction_type IN (
+        'opening_stock', 'purchase', 'sale', 'sales_return',
+        'purchase_return', 'waste', 'warehouse_transfer'
+    )),
+    quantity DECIMAL(14, 4) NOT NULL,
+    reference_type VARCHAR(50),
+    reference_id INTEGER,
+    notes TEXT,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Customers Table
+CREATE TABLE customers (
+    customer_id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(200) NOT NULL,
+    phone_number VARCHAR(30),
+    address TEXT,
+    current_balance DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Suppliers Table
+CREATE TABLE suppliers (
+    supplier_id SERIAL PRIMARY KEY,
+    supplier_name VARCHAR(200) NOT NULL,
+    phone_number VARCHAR(30),
+    address TEXT,
+    current_balance DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    notes TEXT
+);
+
+-- 8. Sales Invoices Table
+CREATE TABLE sales_invoices (
+    invoice_id SERIAL PRIMARY KEY,
+    customer_id INTEGER REFERENCES customers(customer_id),
+    invoice_number VARCHAR(50) NOT NULL UNIQUE,
+    invoice_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    discount_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    paid_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    remaining_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    payment_status VARCHAR(20) NOT NULL CHECK (payment_status IN ('paid', 'partial', 'unpaid')) DEFAULT 'unpaid',
+    warehouse_id INTEGER REFERENCES warehouses(warehouse_id),
+    notes TEXT
+);
+
+-- 9. Sales Invoice Items Table
+CREATE TABLE sales_invoice_items (
+    item_id SERIAL PRIMARY KEY,
+    invoice_id INTEGER NOT NULL REFERENCES sales_invoices(invoice_id),
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    sold_quantity DECIMAL(14, 4) NOT NULL,
+    quantity_unit VARCHAR(20) NOT NULL,
+    carton_count DECIMAL(10, 2),
+    piece_count DECIMAL(10, 2),
+    unit_price DECIMAL(12, 2) NOT NULL,
+    discount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    total_price DECIMAL(14, 2) NOT NULL,
+    notes TEXT
+);
+
+-- 10. Sales Returns Table
+CREATE TABLE sales_returns (
+    return_id SERIAL PRIMARY KEY,
+    original_invoice_id INTEGER NOT NULL REFERENCES sales_invoices(invoice_id),
+    customer_id INTEGER REFERENCES customers(customer_id),
+    return_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    returned_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    refund_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    notes TEXT
+);
+
+-- 11. Sales Return Items Table
+CREATE TABLE sales_return_items (
+    item_id SERIAL PRIMARY KEY,
+    return_id INTEGER NOT NULL REFERENCES sales_returns(return_id),
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    returned_quantity DECIMAL(14, 4) NOT NULL,
+    unit_price DECIMAL(12, 2) NOT NULL,
+    total DECIMAL(14, 2) NOT NULL
+);
+
+-- 12. Purchase Invoices Table
+CREATE TABLE purchase_invoices (
+    purchase_invoice_id SERIAL PRIMARY KEY,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    invoice_number VARCHAR(50) NOT NULL,
+    purchase_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    paid_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    remaining_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    payment_status VARCHAR(20) NOT NULL CHECK (payment_status IN ('paid', 'partial', 'unpaid')) DEFAULT 'unpaid',
+    notes TEXT
+);
+
+-- 13. Purchase Invoice Items Table
+CREATE TABLE purchase_invoice_items (
+    item_id SERIAL PRIMARY KEY,
+    purchase_invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(purchase_invoice_id),
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    purchased_quantity DECIMAL(14, 4) NOT NULL,
+    purchase_price DECIMAL(12, 2) NOT NULL,
+    total_cost DECIMAL(14, 2) NOT NULL
+);
+
+-- 14. Purchase Returns Table
+CREATE TABLE purchase_returns (
+    return_id SERIAL PRIMARY KEY,
+    original_purchase_invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(purchase_invoice_id),
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    return_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    returned_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    notes TEXT
+);
+
+-- 15. Purchase Return Items Table
+CREATE TABLE purchase_return_items (
+    item_id SERIAL PRIMARY KEY,
+    return_id INTEGER NOT NULL REFERENCES purchase_returns(return_id),
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    returned_quantity DECIMAL(14, 4) NOT NULL,
+    unit_cost DECIMAL(12, 2) NOT NULL,
+    total DECIMAL(14, 2) NOT NULL
+);
+
+-- 16. Customer Payments Table
+CREATE TABLE customer_payments (
+    payment_id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    related_invoice_id INTEGER REFERENCES sales_invoices(invoice_id),
+    payment_amount DECIMAL(14, 2) NOT NULL,
+    payment_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 17. Supplier Payments Table
+CREATE TABLE supplier_payments (
+    payment_id SERIAL PRIMARY KEY,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(supplier_id),
+    related_purchase_invoice_id INTEGER REFERENCES purchase_invoices(purchase_invoice_id),
+    payment_amount DECIMAL(14, 2) NOT NULL,
+    payment_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 18. Cash Transactions Table
+CREATE TABLE cash_transactions (
+    transaction_id SERIAL PRIMARY KEY,
+    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
+    amount DECIMAL(14, 2) NOT NULL,
+    source VARCHAR(30) NOT NULL CHECK (source IN (
+        'sales', 'customer_payments', 'supplier_payments',
+        'expenses', 'refunds', 'purchase_payments'
+    )),
+    reference_id INTEGER,
+    description TEXT,
+    transaction_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 19. Expenses Table
+CREATE TABLE expenses (
+    expense_id SERIAL PRIMARY KEY,
+    expense_category VARCHAR(100) NOT NULL,
+    expense_name VARCHAR(200) NOT NULL,
+    amount DECIMAL(14, 2) NOT NULL,
+    expense_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 20. Waste Table
+CREATE TABLE waste (
+    waste_id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    quantity DECIMAL(14, 4) NOT NULL,
+    waste_reason VARCHAR(200),
+    waste_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 21. Warehouse Transfers Table
+CREATE TABLE warehouse_transfers (
+    transfer_id SERIAL PRIMARY KEY,
+    from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    quantity DECIMAL(14, 4) NOT NULL,
+    transfer_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+
+-- 22. Opening Balances Table
+CREATE TABLE opening_balances (
+    opening_balance_id SERIAL PRIMARY KEY,
+    balance_type VARCHAR(30) NOT NULL CHECK (balance_type IN (
+        'opening_inventory', 'opening_cash',
+        'opening_customer_balance', 'opening_supplier_balance'
+    )),
+    related_entity_id INTEGER,
+    amount DECIMAL(14, 2) NOT NULL,
+    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 23. Users Table
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    full_name VARCHAR(200) NOT NULL,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(30) NOT NULL CHECK (role IN ('admin', 'cashier', 'warehouse_employee', 'accountant')),
+    active_status BOOLEAN NOT NULL DEFAULT TRUE,
+    last_login TIMESTAMP
+);
+
+-- 24. Activity Logs Table
+CREATE TABLE activity_logs (
+    log_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(user_id),
+    action_type VARCHAR(100) NOT NULL,
+    table_name VARCHAR(100),
+    record_id INTEGER,
+    action_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- Indexes for Performance
+-- ============================================================
+
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_barcode ON products(barcode);
+CREATE INDEX idx_inventory_product ON inventory(product_id);
+CREATE INDEX idx_inventory_warehouse ON inventory(warehouse_id);
+CREATE INDEX idx_inventory_transactions_product ON inventory_transactions(product_id);
+CREATE INDEX idx_inventory_transactions_warehouse ON inventory_transactions(warehouse_id);
+CREATE INDEX idx_inventory_transactions_type ON inventory_transactions(transaction_type);
+CREATE INDEX idx_sales_invoices_customer ON sales_invoices(customer_id);
+CREATE INDEX idx_sales_invoices_date ON sales_invoices(invoice_date);
+CREATE INDEX idx_sales_invoice_items_invoice ON sales_invoice_items(invoice_id);
+CREATE INDEX idx_purchase_invoices_supplier ON purchase_invoices(supplier_id);
+CREATE INDEX idx_purchase_invoice_items_invoice ON purchase_invoice_items(purchase_invoice_id);
+CREATE INDEX idx_customer_payments_customer ON customer_payments(customer_id);
+CREATE INDEX idx_supplier_payments_supplier ON supplier_payments(supplier_id);
+CREATE INDEX idx_cash_transactions_type ON cash_transactions(transaction_type);
+CREATE INDEX idx_cash_transactions_date ON cash_transactions(transaction_date);
+CREATE INDEX idx_activity_logs_user ON activity_logs(user_id);
+CREATE INDEX idx_activity_logs_date ON activity_logs(action_date);
+
+-- ============================================================
+-- Sample Data: Categories
+-- ============================================================
+
+INSERT INTO categories (category_name, description) VALUES
+    ('Floor Tiles', 'Ceramic and porcelain floor tiles'),
+    ('Wall Tiles', 'Ceramic and porcelain wall tiles'),
+    ('Porcelain', 'Premium porcelain products'),
+    ('Decoration', 'Decorative ceramic items'),
+    ('Accessories', 'Installation accessories and tools');
+
+-- ============================================================
+-- Sample Data: Warehouses
+-- ============================================================
+
+INSERT INTO warehouses (warehouse_name, warehouse_location, notes) VALUES
+    ('Main Warehouse', 'Main Branch', 'Primary storage facility'),
+    ('Secondary Warehouse', 'Secondary Branch', 'Overflow storage');
