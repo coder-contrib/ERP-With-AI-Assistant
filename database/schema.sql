@@ -8,6 +8,7 @@
 -- 3. Opening cash/customer/supplier balances use cash_transactions and
 --    entity_type = 'opening_balance'.
 -- 4. The inventory_cache table is only a performance cache.
+-- 5. cost_per_unit on every transaction enables accurate COGS and profit.
 -- ============================================================
 
 -- 1. Categories Table
@@ -25,7 +26,7 @@ CREATE TABLE products (
     is_meter_based BOOLEAN NOT NULL DEFAULT TRUE,
     allow_piece_sale BOOLEAN NOT NULL DEFAULT FALSE,
     allow_carton_display BOOLEAN NOT NULL DEFAULT TRUE,
-    purchase_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    purchase_cost_per_meter DECIMAL(12, 2) NOT NULL DEFAULT 0,
     selling_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
     pieces_per_carton INTEGER,
     meters_per_carton DECIMAL(10, 4),
@@ -48,6 +49,7 @@ CREATE TABLE warehouses (
 -- 4. Inventory Transactions Table (SOURCE OF TRUTH)
 -- Opening stock is recorded here as transaction_type = 'opening_stock'
 -- with direction = 'IN'. No separate opening_balances table needed for inventory.
+-- cost_per_unit is recorded on EVERY transaction for COGS calculation.
 CREATE TABLE inventory_transactions (
     transaction_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -79,6 +81,7 @@ CREATE TABLE inventory_cache (
     product_id INTEGER NOT NULL REFERENCES products(product_id),
     warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
     cached_quantity DECIMAL(14, 4) NOT NULL DEFAULT 0,
+    cached_avg_cost DECIMAL(12, 2) NOT NULL DEFAULT 0,
     last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (product_id, warehouse_id)
 );
@@ -98,8 +101,9 @@ FROM inventory_transactions
 GROUP BY product_id, warehouse_id;
 
 -- ============================================================
--- View: Weighted average cost per product per warehouse
--- Used for accurate profit calculations
+-- View: Weighted average cost per product per warehouse (COGS basis)
+-- Formula: total_cost_of_inflows / total_quantity_of_inflows
+-- Used for: profit calculation, inventory valuation, COGS
 -- ============================================================
 CREATE OR REPLACE VIEW v_product_avg_cost AS
 SELECT
@@ -110,9 +114,33 @@ SELECT
         THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
              / SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END)
         ELSE 0
-    END AS weighted_avg_cost
+    END AS weighted_avg_cost,
+    SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END) AS total_cost_in,
+    SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) AS total_qty_in
 FROM inventory_transactions
 GROUP BY product_id, warehouse_id;
+
+-- ============================================================
+-- View: Profit per sales invoice item
+-- Revenue - COGS = Gross Profit
+-- ============================================================
+CREATE OR REPLACE VIEW v_sales_profit AS
+SELECT
+    si.invoice_id,
+    si.invoice_number,
+    si.invoice_date,
+    sii.item_id,
+    sii.product_id,
+    p.product_name,
+    sii.sold_quantity,
+    sii.unit_price,
+    sii.total_price AS revenue,
+    sii.cost_at_sale,
+    (sii.sold_quantity * sii.cost_at_sale) AS cogs,
+    sii.total_price - (sii.sold_quantity * sii.cost_at_sale) AS gross_profit
+FROM sales_invoice_items sii
+JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
+JOIN products p ON p.product_id = sii.product_id;
 
 -- ============================================================
 -- View: Product with stock and conversion info
@@ -127,7 +155,7 @@ SELECT
     p.is_meter_based,
     p.allow_piece_sale,
     p.allow_carton_display,
-    p.purchase_price,
+    p.purchase_cost_per_meter,
     p.selling_price,
     p.pieces_per_carton,
     p.meters_per_carton,
@@ -142,19 +170,32 @@ LEFT JOIN categories c ON c.category_id = p.category_id;
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_update_inventory_cache()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_avg_cost DECIMAL(12, 2);
 BEGIN
-    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, last_updated)
+    SELECT CASE
+        WHEN SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) > 0
+        THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
+             / SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END)
+        ELSE 0
+    END INTO v_avg_cost
+    FROM inventory_transactions
+    WHERE product_id = NEW.product_id AND warehouse_id = NEW.warehouse_id;
+
+    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, cached_avg_cost, last_updated)
     SELECT
         NEW.product_id,
         NEW.warehouse_id,
         COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
         - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
+        v_avg_cost,
         NOW()
     FROM inventory_transactions
     WHERE product_id = NEW.product_id AND warehouse_id = NEW.warehouse_id
     ON CONFLICT (product_id, warehouse_id)
     DO UPDATE SET
         cached_quantity = EXCLUDED.cached_quantity,
+        cached_avg_cost = EXCLUDED.cached_avg_cost,
         last_updated = NOW();
     RETURN NEW;
 END;
@@ -172,12 +213,18 @@ CREATE OR REPLACE FUNCTION fn_refresh_inventory_cache()
 RETURNS VOID AS $$
 BEGIN
     TRUNCATE inventory_cache;
-    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, last_updated)
+    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, cached_avg_cost, last_updated)
     SELECT
         product_id,
         warehouse_id,
         COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
         - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
+        CASE
+            WHEN SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) > 0
+            THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
+                 / SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END)
+            ELSE 0
+        END,
         NOW()
     FROM inventory_transactions
     GROUP BY product_id, warehouse_id;
@@ -236,6 +283,7 @@ CREATE TABLE sales_invoice_items (
     carton_count DECIMAL(10, 2),
     piece_count DECIMAL(10, 2),
     unit_price DECIMAL(12, 2) NOT NULL,
+    cost_at_sale DECIMAL(12, 2) NOT NULL DEFAULT 0,
     discount DECIMAL(12, 2) NOT NULL DEFAULT 0,
     total_price DECIMAL(14, 2) NOT NULL,
     notes TEXT
