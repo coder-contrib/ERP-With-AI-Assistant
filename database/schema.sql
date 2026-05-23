@@ -18,7 +18,9 @@ CREATE TABLE products (
     product_id SERIAL PRIMARY KEY,
     product_name VARCHAR(255) NOT NULL,
     category_id INTEGER REFERENCES categories(category_id),
-    measurement_type VARCHAR(20) NOT NULL CHECK (measurement_type IN ('meter', 'piece')),
+    is_meter_based BOOLEAN NOT NULL DEFAULT TRUE,
+    allow_piece_sale BOOLEAN NOT NULL DEFAULT FALSE,
+    allow_carton_display BOOLEAN NOT NULL DEFAULT TRUE,
     purchase_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
     selling_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
     pieces_per_carton INTEGER,
@@ -105,6 +107,29 @@ SELECT
     END AS weighted_avg_cost
 FROM inventory_transactions
 GROUP BY product_id, warehouse_id;
+
+-- ============================================================
+-- View: Product with stock and conversion info
+-- Combines product details with per-product conversion rules
+-- ============================================================
+CREATE OR REPLACE VIEW v_product_details AS
+SELECT
+    p.product_id,
+    p.product_name,
+    p.category_id,
+    c.category_name,
+    p.is_meter_based,
+    p.allow_piece_sale,
+    p.allow_carton_display,
+    p.purchase_price,
+    p.selling_price,
+    p.pieces_per_carton,
+    p.meters_per_carton,
+    p.meters_per_piece,
+    p.barcode,
+    p.active_status
+FROM products p
+LEFT JOIN categories c ON c.category_id = p.category_id;
 
 -- ============================================================
 -- Trigger: Auto-update inventory_cache after each transaction
@@ -373,6 +398,7 @@ CREATE TABLE activity_logs (
 
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_barcode ON products(barcode);
+CREATE INDEX idx_products_meter_based ON products(is_meter_based);
 CREATE INDEX idx_inventory_cache_product ON inventory_cache(product_id);
 CREATE INDEX idx_inventory_cache_warehouse ON inventory_cache(warehouse_id);
 CREATE INDEX idx_inventory_transactions_product ON inventory_transactions(product_id);
