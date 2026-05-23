@@ -13,6 +13,7 @@
 -- 7. Ledger entries provide full double-entry audit trail.
 -- 8. Cache trigger uses DELTA logic (O(1) per insert, not full re-scan).
 -- 9. Unit conversions are per-product via product_unit_conversions table.
+-- 10. Financial summaries use precomputed daily_financial_summary table.
 -- ============================================================
 
 -- ============================================================
@@ -48,9 +49,6 @@ CREATE TABLE products (
 );
 
 -- 3. Product Unit Conversions Table (per-product conversion rules)
--- Each product defines its OWN conversion factors between units.
--- Example: Product A: 1 carton = 12 pieces, 1 piece = 1.44 m²
--- Example: Product B: 1 carton = 8 pieces, 1 piece = 0.36 m²
 CREATE TABLE product_unit_conversions (
     conversion_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -63,8 +61,6 @@ CREATE TABLE product_unit_conversions (
 
 -- ============================================================
 -- Function: Convert quantity between units for a specific product
--- Usage: SELECT fn_convert_unit(product_id, 2, 'carton', 'meter')
--- Returns NULL if no conversion path exists.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_convert_unit(
     p_product_id INTEGER,
@@ -80,7 +76,6 @@ BEGIN
         RETURN p_quantity;
     END IF;
 
-    -- Direct conversion
     SELECT factor INTO v_factor
     FROM product_unit_conversions
     WHERE product_id = p_product_id
@@ -91,7 +86,6 @@ BEGIN
         RETURN p_quantity * v_factor;
     END IF;
 
-    -- Reverse conversion (1/factor)
     SELECT factor INTO v_factor
     FROM product_unit_conversions
     WHERE product_id = p_product_id
@@ -102,7 +96,6 @@ BEGIN
         RETURN p_quantity / v_factor;
     END IF;
 
-    -- Two-hop conversion (from → intermediate → to)
     SELECT (p_quantity * c1.factor * c2.factor) INTO v_result
     FROM product_unit_conversions c1
     JOIN product_unit_conversions c2
@@ -215,7 +208,7 @@ FROM products p
 LEFT JOIN categories c ON c.category_id = p.category_id;
 
 -- ============================================================
--- View: All conversion rules with product name (for UI display)
+-- View: All conversion rules with product name
 -- ============================================================
 CREATE OR REPLACE VIEW v_product_conversions AS
 SELECT
@@ -283,7 +276,7 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_update_inventory_cache();
 
 -- ============================================================
--- Function: Full cache refresh (run periodically or after corrections)
+-- Function: Full cache refresh
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_refresh_inventory_cache()
 RETURNS VOID AS $$
@@ -561,7 +554,7 @@ CREATE TABLE warehouse_transfers (
 
 -- ============================================================
 -- ENGINE 3: ACCOUNTING ENGINE (Profit & Loss + Ledger)
--- Tables: accounts, ledger_entries
+-- Tables: accounts, ledger_entries, daily_financial_summary
 -- Views: v_sales_profit, v_profit_and_loss, v_account_balances
 -- ============================================================
 
@@ -596,6 +589,117 @@ CREATE TABLE ledger_entries (
     )
 );
 
+-- 25. Daily Financial Summary (Precomputed, replaces slow P&L view)
+-- One row per day. Updated by fn_refresh_daily_financial_summary().
+-- Query this for fast P&L reporting over any date range.
+CREATE TABLE daily_financial_summary (
+    summary_id SERIAL PRIMARY KEY,
+    summary_date DATE NOT NULL UNIQUE,
+    revenue DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    cogs DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    gross_profit DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    expenses DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    net_profit DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    sales_count INTEGER NOT NULL DEFAULT 0,
+    returns_amount DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- Function: Refresh financial summary for a specific date
+-- Call after end-of-day, or on-demand for reports.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_refresh_daily_financial_summary(p_date DATE DEFAULT CURRENT_DATE)
+RETURNS VOID AS $$
+DECLARE
+    v_revenue DECIMAL(14, 2);
+    v_cogs DECIMAL(14, 2);
+    v_expenses DECIMAL(14, 2);
+    v_returns DECIMAL(14, 2);
+    v_sales_count INTEGER;
+BEGIN
+    SELECT
+        COALESCE(SUM(sii.total_price), 0),
+        COALESCE(SUM(sii.sold_quantity * sii.cost_at_sale), 0),
+        COUNT(DISTINCT si.invoice_id)
+    INTO v_revenue, v_cogs, v_sales_count
+    FROM sales_invoice_items sii
+    JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
+    WHERE si.invoice_date::date = p_date;
+
+    SELECT COALESCE(SUM(amount), 0) INTO v_expenses
+    FROM expenses
+    WHERE expense_date::date = p_date;
+
+    SELECT COALESCE(SUM(returned_amount), 0) INTO v_returns
+    FROM sales_returns
+    WHERE return_date::date = p_date;
+
+    INSERT INTO daily_financial_summary (
+        summary_date, revenue, cogs, gross_profit,
+        expenses, net_profit, sales_count, returns_amount, last_updated
+    )
+    VALUES (
+        p_date,
+        v_revenue,
+        v_cogs,
+        v_revenue - v_cogs,
+        v_expenses,
+        (v_revenue - v_cogs) - v_expenses,
+        v_sales_count,
+        v_returns,
+        NOW()
+    )
+    ON CONFLICT (summary_date)
+    DO UPDATE SET
+        revenue = EXCLUDED.revenue,
+        cogs = EXCLUDED.cogs,
+        gross_profit = EXCLUDED.gross_profit,
+        expenses = EXCLUDED.expenses,
+        net_profit = EXCLUDED.net_profit,
+        sales_count = EXCLUDED.sales_count,
+        returns_amount = EXCLUDED.returns_amount,
+        last_updated = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- Function: Refresh financial summary for a date range
+-- Useful for backfilling or correcting historical data.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_refresh_financial_summary_range(
+    p_start_date DATE,
+    p_end_date DATE DEFAULT CURRENT_DATE
+) RETURNS VOID AS $$
+DECLARE
+    v_date DATE;
+BEGIN
+    v_date := p_start_date;
+    WHILE v_date <= p_end_date LOOP
+        PERFORM fn_refresh_daily_financial_summary(v_date);
+        v_date := v_date + 1;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- View: Profit & Loss for any period (reads from precomputed table)
+-- Usage: SELECT * FROM v_profit_and_loss WHERE summary_date BETWEEN '2024-01-01' AND '2024-01-31'
+-- Or aggregate: SELECT SUM(revenue), SUM(cogs), SUM(net_profit) FROM daily_financial_summary WHERE ...
+-- ============================================================
+CREATE OR REPLACE VIEW v_profit_and_loss AS
+SELECT
+    summary_date,
+    revenue,
+    cogs,
+    gross_profit,
+    expenses,
+    net_profit,
+    sales_count,
+    returns_amount
+FROM daily_financial_summary
+ORDER BY summary_date DESC;
+
 -- ============================================================
 -- View: Account balances
 -- ============================================================
@@ -617,7 +721,7 @@ LEFT JOIN ledger_entries le ON le.account_id = a.account_id
 GROUP BY a.account_id, a.account_code, a.account_name, a.account_type;
 
 -- ============================================================
--- View: Profit per sales invoice item
+-- View: Profit per sales invoice item (detail level)
 -- ============================================================
 CREATE OR REPLACE VIEW v_sales_profit AS
 SELECT
@@ -637,27 +741,7 @@ FROM sales_invoice_items sii
 JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
 JOIN products p ON p.product_id = sii.product_id;
 
--- ============================================================
--- View: Profit & Loss Summary
--- ============================================================
-CREATE OR REPLACE VIEW v_profit_and_loss AS
-SELECT
-    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS total_revenue,
-    COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS total_cogs,
-    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
-    - COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS gross_profit,
-    COALESCE((SELECT SUM(amount) FROM expenses), 0) AS total_expenses,
-    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
-    - COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
-              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
-    - COALESCE((SELECT SUM(amount) FROM expenses), 0) AS net_profit;
-
--- 25. Users Table
+-- 26. Users Table
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
@@ -668,7 +752,7 @@ CREATE TABLE users (
     last_login TIMESTAMP
 );
 
--- 26. Activity Logs Table
+-- 27. Activity Logs Table
 CREATE TABLE activity_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(user_id),
@@ -712,6 +796,7 @@ CREATE INDEX idx_cash_transactions_entity ON cash_transactions(entity_type, enti
 CREATE INDEX idx_ledger_entries_account ON ledger_entries(account_id);
 CREATE INDEX idx_ledger_entries_date ON ledger_entries(entry_date);
 CREATE INDEX idx_ledger_entries_entity ON ledger_entries(entity_type, entity_id);
+CREATE INDEX idx_daily_financial_summary_date ON daily_financial_summary(summary_date);
 CREATE INDEX idx_activity_logs_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_logs_date ON activity_logs(action_date);
 
