@@ -23,22 +23,26 @@ celery_app.conf.beat_schedule = {
     "refresh-daily-financial-summary": {
         "task": "app.tasks.accounting.refresh_daily_summary",
         "schedule": crontab(hour=23, minute=55),
-        "description": "Refresh financial summary at end of day",
     },
     "refresh-inventory-cache": {
         "task": "app.tasks.inventory.refresh_inventory_cache",
         "schedule": crontab(hour="*/4", minute=0),
-        "description": "Full inventory cache rebuild every 4 hours",
     },
     "check-overdue-payments": {
         "task": "app.tasks.reports.check_overdue_payments",
         "schedule": crontab(hour=8, minute=0),
-        "description": "Check and flag overdue customer/supplier payments daily",
     },
     "generate-daily-report": {
         "task": "app.tasks.reports.generate_daily_report",
         "schedule": crontab(hour=0, minute=5),
-        "description": "Generate previous day report at midnight",
+    },
+    "check-all-alerts": {
+        "task": "app.tasks.notifications.check_all_alerts",
+        "schedule": crontab(hour="*/2", minute=30),
+    },
+    "daily-closing-reminder": {
+        "task": "app.tasks.notifications.daily_closing_reminder",
+        "schedule": crontab(hour=21, minute=0),
     },
 }
 
