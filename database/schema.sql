@@ -238,6 +238,8 @@ CREATE TABLE customers (
     phone_number VARCHAR(30),
     address TEXT,
     current_balance DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    credit_limit DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    payment_terms INTEGER NOT NULL DEFAULT 0,
     notes TEXT,
     created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -401,6 +403,20 @@ SELECT
     COUNT(*) AS total_transactions,
     MAX(transaction_date) AS last_transaction_date
 FROM cash_transactions;
+
+-- ============================================================
+-- View: Customers exceeding credit limit
+-- Used by app to block or warn on credit sales
+-- ============================================================
+CREATE OR REPLACE VIEW v_customers_over_limit AS
+SELECT
+    customer_id,
+    customer_name,
+    current_balance,
+    credit_limit,
+    (current_balance - credit_limit) AS over_limit_amount
+FROM customers
+WHERE credit_limit > 0 AND current_balance > credit_limit;
 
 -- 19. Expenses Table
 CREATE TABLE expenses (
