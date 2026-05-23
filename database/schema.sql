@@ -2,8 +2,12 @@
 -- Ceramic Showroom ERP Database Structure
 -- PostgreSQL Schema
 -- ============================================================
--- DESIGN PRINCIPLE: inventory_transactions is the SOURCE OF TRUTH
--- for all stock. The inventory table is only a performance cache.
+-- DESIGN PRINCIPLES:
+-- 1. inventory_transactions is the SOURCE OF TRUTH for all stock.
+-- 2. Opening stock uses transaction_type = 'opening_stock' (no separate table).
+-- 3. Opening cash/customer/supplier balances use cash_transactions and
+--    entity_type = 'opening_balance'.
+-- 4. The inventory_cache table is only a performance cache.
 -- ============================================================
 
 -- 1. Categories Table
@@ -42,6 +46,8 @@ CREATE TABLE warehouses (
 );
 
 -- 4. Inventory Transactions Table (SOURCE OF TRUTH)
+-- Opening stock is recorded here as transaction_type = 'opening_stock'
+-- with direction = 'IN'. No separate opening_balances table needed for inventory.
 CREATE TABLE inventory_transactions (
     transaction_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -320,15 +326,18 @@ CREATE TABLE supplier_payments (
 );
 
 -- 18. Cash Transactions Table
+-- Opening cash balance is recorded here as entity_type = 'opening_balance'
+-- No separate opening_balances table needed for cash.
 CREATE TABLE cash_transactions (
     transaction_id SERIAL PRIMARY KEY,
     transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
     amount DECIMAL(14, 2) NOT NULL,
     entity_type VARCHAR(30) NOT NULL CHECK (entity_type IN (
         'sales_invoice', 'purchase_invoice', 'customer_payment',
-        'supplier_payment', 'expense', 'sales_return', 'purchase_return'
+        'supplier_payment', 'expense', 'sales_return', 'purchase_return',
+        'opening_balance'
     )),
-    entity_id INTEGER NOT NULL,
+    entity_id INTEGER,
     description TEXT,
     created_by INTEGER,
     transaction_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -377,19 +386,7 @@ CREATE TABLE warehouse_transfers (
     notes TEXT
 );
 
--- 22. Opening Balances Table
-CREATE TABLE opening_balances (
-    opening_balance_id SERIAL PRIMARY KEY,
-    balance_type VARCHAR(30) NOT NULL CHECK (balance_type IN (
-        'opening_inventory', 'opening_cash',
-        'opening_customer_balance', 'opening_supplier_balance'
-    )),
-    related_entity_id INTEGER,
-    amount DECIMAL(14, 2) NOT NULL,
-    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- 23. Users Table
+-- 22. Users Table
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
@@ -400,7 +397,7 @@ CREATE TABLE users (
     last_login TIMESTAMP
 );
 
--- 24. Activity Logs Table
+-- 23. Activity Logs Table
 CREATE TABLE activity_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(user_id),
