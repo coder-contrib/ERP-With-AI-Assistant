@@ -7,6 +7,8 @@ from app.services.inventory_service import InventoryService
 from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
 from app.core.validators import Validator
+from app.events.event_bus import Event, get_event_bus
+from app.events.purchase_events import PURCHASE_CREATED
 from app.schemas.purchases import PurchaseInvoiceCreate
 from app.models.purchases import PurchaseInvoice
 from app.core.exceptions import NotFoundError
@@ -21,6 +23,7 @@ class PurchaseService:
         self.cash = CashService(db)
         self.ledger = LedgerService(db)
         self.validator = Validator(db)
+        self.event_bus = get_event_bus()
 
     def list_invoices(self) -> list[PurchaseInvoice]:
         return self.repo.get_all()
@@ -33,8 +36,6 @@ class PurchaseService:
 
     def create_invoice(self, data: PurchaseInvoiceCreate) -> PurchaseInvoice:
         with transaction(self.db):
-            # --- VALIDATION PHASE ---
-
             supplier = self.supplier_repo.get_by_id(data.supplier_id)
             if not supplier:
                 raise NotFoundError("Supplier not found")
@@ -42,8 +43,6 @@ class PurchaseService:
             for item_data in data.items:
                 self.validator.validate_quantity(item_data.purchased_quantity, "Purchase quantity")
                 self.validator.validate_positive_amount(item_data.purchase_price, "Purchase price")
-
-            # --- EXECUTION PHASE ---
 
             total_amount = sum(item.total_cost for item in data.items)
             remaining = total_amount - data.paid_amount
@@ -91,4 +90,16 @@ class PurchaseService:
                 self.supplier_repo.update_balance(supplier, remaining)
 
         self.db.refresh(invoice)
+        self.event_bus.publish(Event(
+            event_type=PURCHASE_CREATED,
+            data={
+                "purchase_invoice_id": invoice.purchase_invoice_id,
+                "supplier_id": data.supplier_id,
+                "warehouse_id": data.warehouse_id,
+                "total_amount": str(total_amount),
+                "paid_amount": str(data.paid_amount),
+                "remaining_amount": str(max(remaining, Decimal("0"))),
+                "items": [item.model_dump() for item in data.items],
+            },
+        ))
         return invoice

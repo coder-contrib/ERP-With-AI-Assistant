@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from decimal import Decimal
+from dataclasses import asdict
 from app.database import transaction
 from app.repositories.sales_repo import SalesRepository
 from app.repositories.customer_repo import CustomerRepository
@@ -7,6 +8,8 @@ from app.services.inventory_service import InventoryService
 from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
 from app.core.validators import Validator
+from app.events.event_bus import Event, get_event_bus
+from app.events.sale_events import SALE_CREATED, SaleCreatedData
 from app.schemas.sales import SalesInvoiceCreate
 from app.models.sales import SalesInvoice
 from app.core.exceptions import NotFoundError, ValidationError
@@ -21,6 +24,7 @@ class SalesService:
         self.cash = CashService(db)
         self.ledger = LedgerService(db)
         self.validator = Validator(db)
+        self.event_bus = get_event_bus()
 
     def list_invoices(self) -> list[SalesInvoice]:
         return self.repo.get_all()
@@ -33,8 +37,7 @@ class SalesService:
 
     def create_invoice(self, data: SalesInvoiceCreate) -> SalesInvoice:
         with transaction(self.db):
-            # --- VALIDATION PHASE ---
-
+            # --- VALIDATION ---
             if data.invoice_type == "credit" and not data.customer_id:
                 raise ValidationError("Credit invoices require a customer")
 
@@ -49,8 +52,7 @@ class SalesService:
                 self.validator.validate_unit_type_for_product(item_data.product_id, item_data.unit_type)
                 self.validator.validate_stock_available(item_data.product_id, data.warehouse_id, item_data.sold_quantity)
 
-            # --- EXECUTION PHASE ---
-
+            # --- EXECUTION ---
             remaining = total_amount - data.discount_amount - data.paid_amount
             payment_status = self._calc_payment_status(data.paid_amount, remaining)
 
@@ -101,7 +103,23 @@ class SalesService:
                 customer = self.customer_repo.get_by_id(data.customer_id)
                 self.customer_repo.update_balance(customer, remaining)
 
+        # --- PUBLISH EVENT (after commit) ---
         self.db.refresh(invoice)
+        self.event_bus.publish(Event(
+            event_type=SALE_CREATED,
+            data={
+                "invoice_id": invoice.invoice_id,
+                "invoice_number": invoice.invoice_number,
+                "invoice_type": data.invoice_type,
+                "customer_id": data.customer_id,
+                "warehouse_id": data.warehouse_id,
+                "total_amount": str(total_amount),
+                "discount_amount": str(data.discount_amount),
+                "paid_amount": str(data.paid_amount),
+                "remaining_amount": str(max(remaining, Decimal("0"))),
+                "items": [item.model_dump() for item in data.items],
+            },
+        ))
         return invoice
 
     def _calc_payment_status(self, paid: Decimal, remaining: Decimal) -> str:

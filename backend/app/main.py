@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
+from app.events.registry import register_event_handlers
 from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="2.4.0",
-    description="ERP system for ceramic showroom management",
+    version="3.0.0",
+    description="Event-driven ERP system for ceramic showroom management",
 )
 
 app.add_middleware(
@@ -20,6 +21,9 @@ app.add_middleware(
 )
 
 app.add_exception_handler(AppError, app_error_handler)
+
+# Register event handlers at startup
+register_event_handlers()
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
@@ -39,7 +43,7 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["Background Tasks"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "2.4.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "3.0.0"}
 
 
 @app.get("/health")
