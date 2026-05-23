@@ -7,9 +7,35 @@ from app.core.security import verify_password, hash_password, create_access_toke
 from app.core.deps import get_current_user
 from app.core.redis import get_redis
 from app.services.cache_service import CacheService
-from app.schemas.users import LoginRequest, TokenResponse, ChangePasswordRequest
+from app.schemas.users import LoginRequest, TokenResponse, ChangePasswordRequest, UserCreate, UserResponse
 
 router = APIRouter()
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(data: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.username == data.username).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists",
+        )
+    if data.role not in ("admin", "cashier", "warehouse_employee", "accountant"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role. Must be: admin, cashier, warehouse_employee, or accountant",
+        )
+    user = User(
+        full_name=data.full_name,
+        username=data.username,
+        password=hash_password(data.password),
+        role=data.role,
+        active_status=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.post("/login", response_model=TokenResponse)
