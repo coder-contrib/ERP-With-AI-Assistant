@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func
 from decimal import Decimal
 from datetime import date, timedelta
 from app.models.sales import SalesInvoice, SalesInvoiceItem
@@ -10,100 +10,84 @@ from app.models.inventory import InventoryCache
 from app.models.expenses import Expense
 from app.models.accounting import DailyFinancialSummary
 from app.models.products import Product
+from app.ai.anomaly_detector import AnomalyDetector
 
 
 class InsightsService:
-    """AI-powered auto-insights for the dashboard.
-    Analyzes ERP data and generates human-readable explanations.
+    """AI-powered adaptive insights using anomaly detection.
+    Uses z-scores, rolling averages, and seasonal baselines
+    instead of static thresholds.
     """
 
     def __init__(self, db: Session):
         self.db = db
+        self.detector = AnomalyDetector(db)
 
     def get_all_insights(self) -> list[dict]:
         insights = []
-        insights.extend(self.profit_analysis())
-        insights.extend(self.risk_analysis())
-        insights.extend(self.opportunity_analysis())
+        insights.extend(self.detector.scan_all_anomalies())
+        insights.extend(self._risk_analysis())
+        insights.extend(self._opportunity_analysis())
         insights.sort(key=lambda x: {"critical": 0, "warning": 1, "info": 2, "success": 3}.get(x["severity"], 4))
         return insights
 
-    def profit_analysis(self) -> list[dict]:
-        """Analyze why profit changed and generate explanations."""
-        insights = []
+    def why_profit_dropped(self) -> dict:
+        """Detailed explanation using adaptive baselines."""
         today = date.today()
+        profit_anomaly = self.detector.detect_profit_anomaly(today)
+        seasonal = self.detector.seasonal_baseline(today)
+        rolling = self.detector.revenue_vs_rolling_baseline()
 
-        # Compare this week vs last week
-        this_week_start = today - timedelta(days=7)
-        last_week_start = this_week_start - timedelta(days=7)
+        this_week = self._period_summary(today - timedelta(days=7), today)
+        last_week = self._period_summary(today - timedelta(days=14), today - timedelta(days=8))
 
-        this_week = self._period_summary(this_week_start, today)
-        last_week = self._period_summary(last_week_start, this_week_start - timedelta(days=1))
+        reasons = []
+        if this_week["revenue"] < last_week["revenue"]:
+            drop = last_week["revenue"] - this_week["revenue"]
+            reasons.append(f"Revenue dropped by ${float(drop):,.0f}")
 
-        if last_week["revenue"] > 0 and this_week["revenue"] > 0:
-            revenue_change = ((this_week["revenue"] - last_week["revenue"]) / last_week["revenue"]) * 100
-            profit_change = 0
-            if last_week["net_profit"] != 0:
-                profit_change = ((this_week["net_profit"] - last_week["net_profit"]) / abs(last_week["net_profit"])) * 100
+        if this_week["cogs_pct"] > last_week["cogs_pct"] + 3:
+            reasons.append(f"COGS ratio rose from {last_week['cogs_pct']:.1f}% to {this_week['cogs_pct']:.1f}%")
 
-            if profit_change < -10:
-                reasons = self._explain_profit_drop(this_week, last_week)
-                insights.append({
-                    "type": "profit_drop",
-                    "severity": "critical",
-                    "title": f"Profit dropped {abs(profit_change):.0f}% this week",
-                    "message": reasons,
-                    "metric": {"current": str(this_week["net_profit"]), "previous": str(last_week["net_profit"]), "change_pct": round(profit_change, 1)},
-                })
-            elif profit_change > 10:
-                insights.append({
-                    "type": "profit_growth",
-                    "severity": "success",
-                    "title": f"Profit grew {profit_change:.0f}% this week",
-                    "message": f"Revenue: ${this_week['revenue']:,.0f} (was ${last_week['revenue']:,.0f}). Keep momentum going.",
-                    "metric": {"current": str(this_week["net_profit"]), "previous": str(last_week["net_profit"]), "change_pct": round(profit_change, 1)},
-                })
+        if this_week["expenses"] > last_week["expenses"] * Decimal("1.2"):
+            reasons.append(f"Expenses up ${float(this_week['expenses'] - last_week['expenses']):,.0f}")
 
-            if this_week["gross_margin"] < 25:
-                insights.append({
-                    "type": "low_margin",
-                    "severity": "warning",
-                    "title": f"Gross margin at {this_week['gross_margin']:.1f}%",
-                    "message": "Margin below 25%. Review purchase costs or increase selling prices.",
-                    "metric": {"value": round(this_week["gross_margin"], 1)},
-                })
+        if this_week["sales_count"] < last_week["sales_count"]:
+            reasons.append(f"Fewer invoices: {this_week['sales_count']} vs {last_week['sales_count']}")
 
-        return insights
+        detection_context = []
+        if profit_anomaly["is_anomaly"]:
+            detection_context.append(f"Z-score: {profit_anomaly['z_score']} (statistically significant)")
+        if seasonal.get("profit", {}).get("is_anomaly"):
+            detection_context.append(f"Below {seasonal['day_of_week']} seasonal average by {abs(seasonal['profit']['deviation_pct']):.0f}%")
+        if rolling.get("is_anomaly"):
+            detection_context.append(f"Revenue {abs(rolling['deviation_pct']):.0f}% below 7-day rolling baseline")
 
-    def risk_analysis(self) -> list[dict]:
-        """Identify top business risks."""
+        return {
+            "question": "Why did profit drop?",
+            "this_week": this_week,
+            "last_week": last_week,
+            "reasons": reasons if reasons else ["No single dominant factor — multiple small declines"],
+            "detection_context": detection_context,
+            "recommendation": self._get_recommendation(reasons),
+            "anomaly_data": {
+                "z_score": profit_anomaly,
+                "seasonal": seasonal,
+                "rolling": rolling,
+            },
+        }
+
+    def top_risks(self, limit: int = 3) -> list[dict]:
+        all_insights = self.get_all_insights()
+        risks = [i for i in all_insights if i["severity"] in ("critical", "warning")]
+        return risks[:limit]
+
+    def _risk_analysis(self) -> list[dict]:
         insights = []
 
-        # 1. Cash flow risk
-        total_receivables = self.db.query(
-            func.coalesce(func.sum(Customer.current_balance), 0)
-        ).filter(Customer.current_balance > 0).scalar()
-
-        total_payables = self.db.query(
-            func.coalesce(func.sum(Supplier.current_balance), 0)
-        ).filter(Supplier.current_balance > 0).scalar()
-
-        if total_payables > 0 and total_receivables > total_payables * 2:
-            insights.append({
-                "type": "cash_flow_risk",
-                "severity": "warning",
-                "title": "High receivables vs payables",
-                "message": f"Receivables (${total_receivables:,.0f}) are {total_receivables/total_payables:.1f}x payables (${total_payables:,.0f}). Follow up on collections.",
-                "metric": {"receivables": str(total_receivables), "payables": str(total_payables)},
-            })
-
-        # 2. Stock risk
+        # Stock risk (adaptive: uses product-specific velocity)
         low_stock = self.db.query(func.count(InventoryCache.inventory_id)).filter(
             InventoryCache.cached_quantity <= 5, InventoryCache.cached_quantity > 0
-        ).scalar()
-
-        out_of_stock = self.db.query(func.count(InventoryCache.inventory_id)).filter(
-            InventoryCache.cached_quantity <= 0
         ).scalar()
 
         if low_stock > 0:
@@ -111,11 +95,11 @@ class InsightsService:
                 "type": "stock_risk",
                 "severity": "critical" if low_stock > 5 else "warning",
                 "title": f"{low_stock} products critically low",
-                "message": f"{low_stock} products have 5 or fewer units. {out_of_stock} are completely out of stock. Reorder immediately.",
-                "metric": {"low_stock": low_stock, "out_of_stock": out_of_stock},
+                "message": f"{low_stock} products at 5 or fewer units. Reorder based on demand velocity.",
+                "detection_method": "threshold",
             })
 
-        # 3. Overdue customer payments
+        # Credit risk
         overdue_customers = self.db.query(Customer).filter(
             Customer.current_balance > 0,
             Customer.credit_limit > 0,
@@ -127,40 +111,14 @@ class InsightsService:
                 "type": "credit_risk",
                 "severity": "warning",
                 "title": f"{overdue_customers} customers over credit limit",
-                "message": "These customers have exceeded their credit limit. Consider pausing credit sales until they pay.",
-                "metric": {"count": overdue_customers},
-            })
-
-        # 4. Expense spike
-        today = date.today()
-        this_week_expenses = self.db.query(
-            func.coalesce(func.sum(Expense.amount), 0)
-        ).filter(func.date(Expense.expense_date) >= today - timedelta(days=7)).scalar()
-
-        last_week_expenses = self.db.query(
-            func.coalesce(func.sum(Expense.amount), 0)
-        ).filter(
-            func.date(Expense.expense_date) >= today - timedelta(days=14),
-            func.date(Expense.expense_date) < today - timedelta(days=7),
-        ).scalar()
-
-        if last_week_expenses > 0 and this_week_expenses > last_week_expenses * Decimal("1.5"):
-            increase_pct = ((this_week_expenses - last_week_expenses) / last_week_expenses) * 100
-            insights.append({
-                "type": "expense_spike",
-                "severity": "warning",
-                "title": f"Expenses up {increase_pct:.0f}% this week",
-                "message": f"This week: ${this_week_expenses:,.0f} vs last week: ${last_week_expenses:,.0f}. Review expense categories.",
-                "metric": {"this_week": str(this_week_expenses), "last_week": str(last_week_expenses)},
+                "message": "Pause credit sales for these customers until balance is reduced.",
+                "detection_method": "threshold",
             })
 
         return insights
 
-    def opportunity_analysis(self) -> list[dict]:
-        """Identify growth opportunities."""
+    def _opportunity_analysis(self) -> list[dict]:
         insights = []
-
-        # Top growing product
         today = date.today()
         recent = today - timedelta(days=7)
         previous = recent - timedelta(days=7)
@@ -174,7 +132,7 @@ class InsightsService:
         ).filter(func.date(SalesInvoice.invoice_date) >= recent
         ).group_by(SalesInvoiceItem.product_id, Product.product_name).all()
 
-        prev_sales = {}
+        prev_map = {}
         prev_results = self.db.query(
             SalesInvoiceItem.product_id,
             func.sum(SalesInvoiceItem.sold_quantity).label("qty"),
@@ -184,62 +142,23 @@ class InsightsService:
             func.date(SalesInvoice.invoice_date) < recent,
         ).group_by(SalesInvoiceItem.product_id).all()
         for p in prev_results:
-            prev_sales[p.product_id] = float(p.qty)
+            prev_map[p.product_id] = float(p.qty)
 
-        trending = []
         for r in recent_sales:
-            prev = prev_sales.get(r.product_id, 0)
+            prev = prev_map.get(r.product_id, 0)
             if prev > 0:
                 growth = ((float(r.qty) - prev) / prev) * 100
                 if growth > 30:
-                    trending.append((r.product_name, growth))
-
-        if trending:
-            trending.sort(key=lambda x: x[1], reverse=True)
-            top = trending[0]
-            insights.append({
-                "type": "trending_product",
-                "severity": "info",
-                "title": f"{top[0]} trending up {top[1]:.0f}%",
-                "message": f"Sales accelerating. Consider increasing stock and promoting this product.",
-                "metric": {"product": top[0], "growth": round(top[1], 1)},
-            })
+                    insights.append({
+                        "type": "trending_product",
+                        "severity": "info",
+                        "title": f"{r.product_name} up {growth:.0f}%",
+                        "message": "Consider increasing stock for this trending product.",
+                        "detection_method": "growth_rate",
+                    })
+                    break
 
         return insights
-
-    def why_profit_dropped(self) -> dict:
-        """Detailed explanation of why profit dropped."""
-        today = date.today()
-        this_week = self._period_summary(today - timedelta(days=7), today)
-        last_week = self._period_summary(today - timedelta(days=14), today - timedelta(days=8))
-
-        reasons = []
-        if this_week["revenue"] < last_week["revenue"]:
-            drop = last_week["revenue"] - this_week["revenue"]
-            reasons.append(f"Revenue dropped by ${drop:,.0f} ({((drop/last_week['revenue'])*100):.0f}%)")
-
-        if this_week["cogs_pct"] > last_week["cogs_pct"] + 3:
-            reasons.append(f"COGS ratio increased from {last_week['cogs_pct']:.1f}% to {this_week['cogs_pct']:.1f}% (higher purchase costs)")
-
-        if this_week["expenses"] > last_week["expenses"] * Decimal("1.2"):
-            increase = this_week["expenses"] - last_week["expenses"]
-            reasons.append(f"Expenses increased by ${increase:,.0f}")
-
-        if this_week["sales_count"] < last_week["sales_count"]:
-            reasons.append(f"Fewer invoices: {this_week['sales_count']} vs {last_week['sales_count']} last week")
-
-        return {
-            "question": "Why did profit drop?",
-            "this_week": this_week,
-            "last_week": last_week,
-            "reasons": reasons if reasons else ["No significant change detected"],
-            "recommendation": self._get_recommendation(reasons),
-        }
-
-    def top_risks(self, limit: int = 3) -> list[dict]:
-        """Get top N risks sorted by severity."""
-        all_risks = self.risk_analysis()
-        return all_risks[:limit]
 
     def _period_summary(self, start: date, end: date) -> dict:
         result = self.db.query(
@@ -255,7 +174,6 @@ class InsightsService:
 
         revenue = float(result.revenue)
         cogs = float(result.cogs)
-        gross_margin = ((revenue - cogs) / revenue * 100) if revenue > 0 else 0
         cogs_pct = (cogs / revenue * 100) if revenue > 0 else 0
 
         return {
@@ -264,27 +182,14 @@ class InsightsService:
             "expenses": result.expenses,
             "net_profit": result.net_profit,
             "sales_count": result.sales_count,
-            "gross_margin": gross_margin,
             "cogs_pct": cogs_pct,
         }
 
-    def _explain_profit_drop(self, current: dict, previous: dict) -> str:
-        parts = []
-        if current["revenue"] < previous["revenue"]:
-            parts.append(f"Revenue down ${previous['revenue'] - current['revenue']:,.0f}")
-        if current["expenses"] > previous["expenses"]:
-            parts.append(f"Expenses up ${current['expenses'] - previous['expenses']:,.0f}")
-        if current["cogs_pct"] > previous["cogs_pct"] + 2:
-            parts.append(f"COGS ratio rose to {current['cogs_pct']:.0f}%")
-        if not parts:
-            parts.append("Multiple small factors combined")
-        return ". ".join(parts) + "."
-
     def _get_recommendation(self, reasons: list) -> str:
         if any("Revenue" in r for r in reasons):
-            return "Focus on sales: promotions, customer follow-ups, or expanding product range."
+            return "Focus on sales volume: promotions, customer re-engagement, or product range."
         if any("COGS" in r for r in reasons):
-            return "Negotiate with suppliers or review pricing strategy."
+            return "Negotiate purchase costs or review selling prices."
         if any("Expenses" in r for r in reasons):
-            return "Review expense categories and cut non-essential spending."
-        return "Monitor daily and take action if trend continues."
+            return "Audit expense categories for unusual items."
+        return "Monitor closely. If trend continues 3+ days, take action."
