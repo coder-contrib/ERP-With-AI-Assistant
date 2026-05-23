@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -12,6 +13,17 @@ class Settings(BaseSettings):
     ai_model: str = "claude-sonnet-4-20250514"
     debug: bool = False
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_origins(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     class Config:
         env_file = ".env"
