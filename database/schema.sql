@@ -251,6 +251,8 @@ CREATE TABLE suppliers (
     phone_number VARCHAR(30),
     address TEXT,
     current_balance DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    payment_terms INTEGER NOT NULL DEFAULT 0,
+    last_payment_date TIMESTAMP,
     notes TEXT
 );
 
@@ -417,6 +419,29 @@ SELECT
     (current_balance - credit_limit) AS over_limit_amount
 FROM customers
 WHERE credit_limit > 0 AND current_balance > credit_limit;
+
+-- ============================================================
+-- View: Suppliers with overdue payments
+-- ============================================================
+CREATE OR REPLACE VIEW v_suppliers_overdue AS
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    s.current_balance,
+    s.payment_terms,
+    s.last_payment_date,
+    CASE
+        WHEN s.last_payment_date IS NOT NULL
+        THEN CURRENT_DATE - s.last_payment_date::date
+        ELSE NULL
+    END AS days_since_last_payment
+FROM suppliers s
+WHERE s.current_balance > 0
+  AND s.payment_terms > 0
+  AND (
+    s.last_payment_date IS NULL
+    OR (CURRENT_DATE - s.last_payment_date::date) > s.payment_terms
+  );
 
 -- 19. Expenses Table
 CREATE TABLE expenses (
