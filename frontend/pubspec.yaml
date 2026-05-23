@@ -1,0 +1,48 @@
+name: ceramic_erp
+description: Ceramic Showroom ERP - Enterprise Management System
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  go_router: ^14.0.0
+  dio: ^5.4.0
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  intl: ^0.19.0
+  fl_chart: ^0.66.0
+  data_table_2: ^2.5.8
+  shimmer: ^3.0.0
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  responsive_framework: ^1.1.1
+  heroicons: ^0.3.0
+  toastification: ^1.2.1
+  json_annotation: ^4.8.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
