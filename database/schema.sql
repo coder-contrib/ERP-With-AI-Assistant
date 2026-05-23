@@ -11,6 +11,7 @@
 -- 5. cost_per_unit on every transaction enables accurate COGS and profit.
 -- 6. Three engines: Inventory Engine, Cash Engine, Accounting Engine.
 -- 7. Ledger entries provide full double-entry audit trail.
+-- 8. Cache trigger uses DELTA logic (O(1) per insert, not full re-scan).
 -- ============================================================
 
 -- ============================================================
@@ -81,12 +82,15 @@ CREATE TABLE inventory_transactions (
 );
 
 -- 5. Inventory Cache Table (AUTO-UPDATED, NOT MANUALLY EDITED)
+-- cached_total_cost_in and cached_total_qty_in support incremental avg cost
 CREATE TABLE inventory_cache (
     inventory_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
     warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
     cached_quantity DECIMAL(14, 4) NOT NULL DEFAULT 0,
     cached_avg_cost DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    cached_total_cost_in DECIMAL(16, 2) NOT NULL DEFAULT 0,
+    cached_total_qty_in DECIMAL(14, 4) NOT NULL DEFAULT 0,
     last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (product_id, warehouse_id)
 );
@@ -145,37 +149,57 @@ FROM products p
 LEFT JOIN categories c ON c.category_id = p.category_id;
 
 -- ============================================================
--- Trigger: Auto-update inventory_cache after each transaction
+-- Trigger: DELTA-BASED inventory_cache update (O(1) per insert)
+-- Instead of re-scanning all transactions, applies only the delta
+-- from the new row. Much faster at scale.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_update_inventory_cache()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_avg_cost DECIMAL(12, 2);
+    v_delta DECIMAL(14, 4);
+    v_new_total_cost DECIMAL(16, 2);
+    v_new_total_qty DECIMAL(14, 4);
+    v_new_avg DECIMAL(12, 2);
 BEGIN
-    SELECT CASE
-        WHEN SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) > 0
-        THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
-             / SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END)
-        ELSE 0
-    END INTO v_avg_cost
-    FROM inventory_transactions
-    WHERE product_id = NEW.product_id AND warehouse_id = NEW.warehouse_id;
+    -- Calculate quantity delta
+    IF NEW.direction = 'IN' THEN
+        v_delta := NEW.quantity;
+    ELSE
+        v_delta := -NEW.quantity;
+    END IF;
 
-    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, cached_avg_cost, last_updated)
-    SELECT
+    -- Upsert with delta logic
+    INSERT INTO inventory_cache (
+        product_id, warehouse_id, cached_quantity,
+        cached_total_cost_in, cached_total_qty_in, cached_avg_cost, last_updated
+    )
+    VALUES (
         NEW.product_id,
         NEW.warehouse_id,
-        COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
-        - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
-        v_avg_cost,
+        v_delta,
+        CASE WHEN NEW.direction = 'IN' THEN NEW.quantity * NEW.cost_per_unit ELSE 0 END,
+        CASE WHEN NEW.direction = 'IN' THEN NEW.quantity ELSE 0 END,
+        CASE WHEN NEW.direction = 'IN' THEN NEW.cost_per_unit ELSE 0 END,
         NOW()
-    FROM inventory_transactions
-    WHERE product_id = NEW.product_id AND warehouse_id = NEW.warehouse_id
+    )
     ON CONFLICT (product_id, warehouse_id)
     DO UPDATE SET
-        cached_quantity = EXCLUDED.cached_quantity,
-        cached_avg_cost = EXCLUDED.cached_avg_cost,
+        cached_quantity = inventory_cache.cached_quantity + v_delta,
+        cached_total_cost_in = inventory_cache.cached_total_cost_in
+            + CASE WHEN NEW.direction = 'IN' THEN NEW.quantity * NEW.cost_per_unit ELSE 0 END,
+        cached_total_qty_in = inventory_cache.cached_total_qty_in
+            + CASE WHEN NEW.direction = 'IN' THEN NEW.quantity ELSE 0 END,
+        cached_avg_cost = CASE
+            WHEN (inventory_cache.cached_total_qty_in
+                  + CASE WHEN NEW.direction = 'IN' THEN NEW.quantity ELSE 0 END) > 0
+            THEN (inventory_cache.cached_total_cost_in
+                  + CASE WHEN NEW.direction = 'IN' THEN NEW.quantity * NEW.cost_per_unit ELSE 0 END)
+                 / (inventory_cache.cached_total_qty_in
+                  + CASE WHEN NEW.direction = 'IN' THEN NEW.quantity ELSE 0 END)
+            ELSE inventory_cache.cached_avg_cost
+        END,
         last_updated = NOW();
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -186,18 +210,24 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_update_inventory_cache();
 
 -- ============================================================
--- Function: Full cache refresh (run periodically or on demand)
+-- Function: Full cache refresh (run periodically or after corrections)
+-- Use this to fix any drift between cache and source of truth.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_refresh_inventory_cache()
 RETURNS VOID AS $$
 BEGIN
     TRUNCATE inventory_cache;
-    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, cached_avg_cost, last_updated)
+    INSERT INTO inventory_cache (
+        product_id, warehouse_id, cached_quantity,
+        cached_total_cost_in, cached_total_qty_in, cached_avg_cost, last_updated
+    )
     SELECT
         product_id,
         warehouse_id,
         COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
         - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
+        COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END), 0),
+        COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0),
         CASE
             WHEN SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) > 0
             THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
