@@ -15,6 +15,13 @@ class InventoryService:
     def get_product_stock(self, product_id: int) -> list[InventoryCache]:
         return self.repo.get_product_stock(product_id)
 
+    def get_available_quantity(self, product_id: int, warehouse_id: int) -> Decimal:
+        stocks = self.repo.get_product_stock(product_id)
+        for stock in stocks:
+            if stock.warehouse_id == warehouse_id:
+                return stock.cached_quantity
+        return Decimal("0")
+
     def record_sale(self, product_id: int, warehouse_id: int, quantity: Decimal,
                     unit_type: str, cost_per_unit: Decimal, reference_id: int):
         self.repo.create_transaction(
@@ -53,6 +60,20 @@ class InventoryService:
             quantity=quantity,
             unit_type=unit_type,
             cost_per_unit=cost_per_unit,
+        )
+
+    def record_waste(self, product_id: int, warehouse_id: int, quantity: Decimal,
+                     unit_type: str, cost_per_unit: Decimal, reference_id: int):
+        self.repo.create_transaction(
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transaction_type="waste",
+            direction="OUT",
+            quantity=quantity,
+            unit_type=unit_type,
+            cost_per_unit=cost_per_unit,
+            reference_type="waste",
+            reference_id=reference_id,
         )
 
     def refresh_cache(self):

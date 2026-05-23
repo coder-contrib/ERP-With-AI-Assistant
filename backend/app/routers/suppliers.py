@@ -2,43 +2,32 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.suppliers import SupplierCreate, SupplierUpdate, SupplierResponse
-from app.repositories.supplier_repo import SupplierRepository
-from app.core.exceptions import NotFoundError
+from app.services.supplier_service import SupplierService
+from app.core.deps import require_permission
+from app.models.users import User
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[SupplierResponse])
-def list_suppliers(db: Session = Depends(get_db)):
-    repo = SupplierRepository(db)
-    return repo.get_all()
+def list_suppliers(current_user: User = Depends(require_permission("suppliers:read")), db: Session = Depends(get_db)):
+    service = SupplierService(db)
+    return service.list_all()
 
 
 @router.get("/{supplier_id}", response_model=SupplierResponse)
-def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
-    repo = SupplierRepository(db)
-    supplier = repo.get_by_id(supplier_id)
-    if not supplier:
-        raise NotFoundError("Supplier not found")
-    return supplier
+def get_supplier(supplier_id: int, current_user: User = Depends(require_permission("suppliers:read")), db: Session = Depends(get_db)):
+    service = SupplierService(db)
+    return service.get(supplier_id)
 
 
 @router.post("/", response_model=SupplierResponse, status_code=201)
-def create_supplier(data: SupplierCreate, db: Session = Depends(get_db)):
-    repo = SupplierRepository(db)
-    supplier = repo.create(**data.model_dump())
-    db.commit()
-    db.refresh(supplier)
-    return supplier
+def create_supplier(data: SupplierCreate, current_user: User = Depends(require_permission("suppliers:write")), db: Session = Depends(get_db)):
+    service = SupplierService(db)
+    return service.create(data)
 
 
 @router.put("/{supplier_id}", response_model=SupplierResponse)
-def update_supplier(supplier_id: int, data: SupplierUpdate, db: Session = Depends(get_db)):
-    repo = SupplierRepository(db)
-    supplier = repo.get_by_id(supplier_id)
-    if not supplier:
-        raise NotFoundError("Supplier not found")
-    supplier = repo.update(supplier, **data.model_dump(exclude_unset=True))
-    db.commit()
-    db.refresh(supplier)
-    return supplier
+def update_supplier(supplier_id: int, data: SupplierUpdate, current_user: User = Depends(require_permission("suppliers:write")), db: Session = Depends(get_db)):
+    service = SupplierService(db)
+    return service.update(supplier_id, data)

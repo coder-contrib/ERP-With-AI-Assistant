@@ -1,0 +1,44 @@
+from sqlalchemy.orm import Session
+from app.repositories.product_repo import ProductRepository
+from app.schemas.products import ProductCreate, ProductUpdate, ConversionCreate
+from app.models.products import Product, ProductUnitConversion
+from app.core.exceptions import NotFoundError
+
+
+class ProductService:
+    def __init__(self, db: Session):
+        self.db = db
+        self.repo = ProductRepository(db)
+
+    def list_all(self, active_only: bool = True) -> list[Product]:
+        return self.repo.get_all(active_only)
+
+    def get(self, product_id: int) -> Product:
+        product = self.repo.get_by_id(product_id)
+        if not product:
+            raise NotFoundError("Product not found")
+        return product
+
+    def create(self, data: ProductCreate) -> Product:
+        product = self.repo.create(**data.model_dump())
+        self.db.commit()
+        self.db.refresh(product)
+        return product
+
+    def update(self, product_id: int, data: ProductUpdate) -> Product:
+        product = self.get(product_id)
+        product = self.repo.update(product, **data.model_dump(exclude_unset=True))
+        self.db.commit()
+        self.db.refresh(product)
+        return product
+
+    def get_conversions(self, product_id: int) -> list[ProductUnitConversion]:
+        self.get(product_id)
+        return self.repo.get_conversions(product_id)
+
+    def add_conversion(self, product_id: int, data: ConversionCreate) -> ProductUnitConversion:
+        self.get(product_id)
+        conversion = self.repo.add_conversion(product_id, data.from_unit, data.to_unit, data.factor)
+        self.db.commit()
+        self.db.refresh(conversion)
+        return conversion
