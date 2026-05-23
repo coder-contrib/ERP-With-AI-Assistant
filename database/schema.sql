@@ -12,11 +12,13 @@
 -- 6. Three engines: Inventory Engine, Cash Engine, Accounting Engine.
 -- 7. Ledger entries provide full double-entry audit trail.
 -- 8. Cache trigger uses DELTA logic (O(1) per insert, not full re-scan).
+-- 9. Unit conversions are per-product via product_unit_conversions table.
 -- ============================================================
 
 -- ============================================================
 -- ENGINE 1: INVENTORY ENGINE
--- Tables: products, warehouses, inventory_transactions, inventory_cache
+-- Tables: products, warehouses, inventory_transactions, inventory_cache,
+--         product_unit_conversions
 -- Views: v_current_stock, v_product_avg_cost, v_product_details
 -- ============================================================
 
@@ -35,11 +37,9 @@ CREATE TABLE products (
     is_meter_based BOOLEAN NOT NULL DEFAULT TRUE,
     allow_piece_sale BOOLEAN NOT NULL DEFAULT FALSE,
     allow_carton_display BOOLEAN NOT NULL DEFAULT TRUE,
+    base_unit VARCHAR(20) NOT NULL CHECK (base_unit IN ('meter', 'piece')) DEFAULT 'meter',
     purchase_cost_per_meter DECIMAL(12, 2) NOT NULL DEFAULT 0,
     selling_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    pieces_per_carton INTEGER,
-    meters_per_carton DECIMAL(10, 4),
-    meters_per_piece DECIMAL(10, 4),
     barcode VARCHAR(100),
     product_image TEXT,
     active_status BOOLEAN NOT NULL DEFAULT TRUE,
@@ -47,7 +47,76 @@ CREATE TABLE products (
     notes TEXT
 );
 
--- 3. Warehouses Table
+-- 3. Product Unit Conversions Table (per-product conversion rules)
+-- Each product defines its OWN conversion factors between units.
+-- Example: Product A: 1 carton = 12 pieces, 1 piece = 1.44 m²
+-- Example: Product B: 1 carton = 8 pieces, 1 piece = 0.36 m²
+CREATE TABLE product_unit_conversions (
+    conversion_id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    from_unit VARCHAR(20) NOT NULL CHECK (from_unit IN ('meter', 'piece', 'carton')),
+    to_unit VARCHAR(20) NOT NULL CHECK (to_unit IN ('meter', 'piece', 'carton')),
+    factor DECIMAL(10, 4) NOT NULL CHECK (factor > 0),
+    UNIQUE (product_id, from_unit, to_unit),
+    CONSTRAINT chk_different_units CHECK (from_unit != to_unit)
+);
+
+-- ============================================================
+-- Function: Convert quantity between units for a specific product
+-- Usage: SELECT fn_convert_unit(product_id, 2, 'carton', 'meter')
+-- Returns NULL if no conversion path exists.
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_convert_unit(
+    p_product_id INTEGER,
+    p_quantity DECIMAL(14, 4),
+    p_from_unit VARCHAR(20),
+    p_to_unit VARCHAR(20)
+) RETURNS DECIMAL(14, 4) AS $$
+DECLARE
+    v_factor DECIMAL(10, 4);
+    v_result DECIMAL(14, 4);
+BEGIN
+    IF p_from_unit = p_to_unit THEN
+        RETURN p_quantity;
+    END IF;
+
+    -- Direct conversion
+    SELECT factor INTO v_factor
+    FROM product_unit_conversions
+    WHERE product_id = p_product_id
+      AND from_unit = p_from_unit
+      AND to_unit = p_to_unit;
+
+    IF v_factor IS NOT NULL THEN
+        RETURN p_quantity * v_factor;
+    END IF;
+
+    -- Reverse conversion (1/factor)
+    SELECT factor INTO v_factor
+    FROM product_unit_conversions
+    WHERE product_id = p_product_id
+      AND from_unit = p_to_unit
+      AND to_unit = p_from_unit;
+
+    IF v_factor IS NOT NULL AND v_factor > 0 THEN
+        RETURN p_quantity / v_factor;
+    END IF;
+
+    -- Two-hop conversion (from → intermediate → to)
+    SELECT (p_quantity * c1.factor * c2.factor) INTO v_result
+    FROM product_unit_conversions c1
+    JOIN product_unit_conversions c2
+      ON c2.product_id = c1.product_id AND c2.from_unit = c1.to_unit
+    WHERE c1.product_id = p_product_id
+      AND c1.from_unit = p_from_unit
+      AND c2.to_unit = p_to_unit
+    LIMIT 1;
+
+    RETURN v_result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. Warehouses Table
 CREATE TABLE warehouses (
     warehouse_id SERIAL PRIMARY KEY,
     warehouse_name VARCHAR(100) NOT NULL,
@@ -55,7 +124,7 @@ CREATE TABLE warehouses (
     notes TEXT
 );
 
--- 4. Inventory Transactions Table (SOURCE OF TRUTH)
+-- 5. Inventory Transactions Table (SOURCE OF TRUTH)
 CREATE TABLE inventory_transactions (
     transaction_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -81,8 +150,7 @@ CREATE TABLE inventory_transactions (
     )
 );
 
--- 5. Inventory Cache Table (AUTO-UPDATED, NOT MANUALLY EDITED)
--- cached_total_cost_in and cached_total_qty_in support incremental avg cost
+-- 6. Inventory Cache Table (AUTO-UPDATED, NOT MANUALLY EDITED)
 CREATE TABLE inventory_cache (
     inventory_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -136,39 +204,44 @@ SELECT
     p.category_id,
     c.category_name,
     p.is_meter_based,
+    p.base_unit,
     p.allow_piece_sale,
     p.allow_carton_display,
     p.purchase_cost_per_meter,
     p.selling_price,
-    p.pieces_per_carton,
-    p.meters_per_carton,
-    p.meters_per_piece,
     p.barcode,
     p.active_status
 FROM products p
 LEFT JOIN categories c ON c.category_id = p.category_id;
 
 -- ============================================================
+-- View: All conversion rules with product name (for UI display)
+-- ============================================================
+CREATE OR REPLACE VIEW v_product_conversions AS
+SELECT
+    puc.conversion_id,
+    puc.product_id,
+    p.product_name,
+    puc.from_unit,
+    puc.to_unit,
+    puc.factor
+FROM product_unit_conversions puc
+JOIN products p ON p.product_id = puc.product_id;
+
+-- ============================================================
 -- Trigger: DELTA-BASED inventory_cache update (O(1) per insert)
--- Instead of re-scanning all transactions, applies only the delta
--- from the new row. Much faster at scale.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_update_inventory_cache()
 RETURNS TRIGGER AS $$
 DECLARE
     v_delta DECIMAL(14, 4);
-    v_new_total_cost DECIMAL(16, 2);
-    v_new_total_qty DECIMAL(14, 4);
-    v_new_avg DECIMAL(12, 2);
 BEGIN
-    -- Calculate quantity delta
     IF NEW.direction = 'IN' THEN
         v_delta := NEW.quantity;
     ELSE
         v_delta := -NEW.quantity;
     END IF;
 
-    -- Upsert with delta logic
     INSERT INTO inventory_cache (
         product_id, warehouse_id, cached_quantity,
         cached_total_cost_in, cached_total_qty_in, cached_avg_cost, last_updated
@@ -211,7 +284,6 @@ EXECUTE FUNCTION fn_update_inventory_cache();
 
 -- ============================================================
 -- Function: Full cache refresh (run periodically or after corrections)
--- Use this to fix any drift between cache and source of truth.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_refresh_inventory_cache()
 RETURNS VOID AS $$
@@ -246,7 +318,7 @@ $$ LANGUAGE plpgsql;
 -- Views: v_cash_balance
 -- ============================================================
 
--- 6. Customers Table
+-- 7. Customers Table
 CREATE TABLE customers (
     customer_id SERIAL PRIMARY KEY,
     customer_name VARCHAR(200) NOT NULL,
@@ -259,7 +331,7 @@ CREATE TABLE customers (
     created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Suppliers Table
+-- 8. Suppliers Table
 CREATE TABLE suppliers (
     supplier_id SERIAL PRIMARY KEY,
     supplier_name VARCHAR(200) NOT NULL,
@@ -271,7 +343,7 @@ CREATE TABLE suppliers (
     notes TEXT
 );
 
--- 8. Sales Invoices Table
+-- 9. Sales Invoices Table
 CREATE TABLE sales_invoices (
     invoice_id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES customers(customer_id),
@@ -291,7 +363,7 @@ CREATE TABLE sales_invoices (
     )
 );
 
--- 9. Sales Invoice Items Table
+-- 10. Sales Invoice Items Table
 CREATE TABLE sales_invoice_items (
     item_id SERIAL PRIMARY KEY,
     invoice_id INTEGER NOT NULL REFERENCES sales_invoices(invoice_id),
@@ -308,7 +380,7 @@ CREATE TABLE sales_invoice_items (
     notes TEXT
 );
 
--- 10. Sales Returns Table
+-- 11. Sales Returns Table
 CREATE TABLE sales_returns (
     return_id SERIAL PRIMARY KEY,
     original_invoice_id INTEGER NOT NULL REFERENCES sales_invoices(invoice_id),
@@ -319,7 +391,7 @@ CREATE TABLE sales_returns (
     notes TEXT
 );
 
--- 11. Sales Return Items Table
+-- 12. Sales Return Items Table
 CREATE TABLE sales_return_items (
     item_id SERIAL PRIMARY KEY,
     return_id INTEGER NOT NULL REFERENCES sales_returns(return_id),
@@ -329,7 +401,7 @@ CREATE TABLE sales_return_items (
     total DECIMAL(14, 2) NOT NULL
 );
 
--- 12. Purchase Invoices Table
+-- 13. Purchase Invoices Table
 CREATE TABLE purchase_invoices (
     purchase_invoice_id SERIAL PRIMARY KEY,
     supplier_id INTEGER NOT NULL REFERENCES suppliers(supplier_id),
@@ -342,7 +414,7 @@ CREATE TABLE purchase_invoices (
     notes TEXT
 );
 
--- 13. Purchase Invoice Items Table
+-- 14. Purchase Invoice Items Table
 CREATE TABLE purchase_invoice_items (
     item_id SERIAL PRIMARY KEY,
     purchase_invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(purchase_invoice_id),
@@ -352,7 +424,7 @@ CREATE TABLE purchase_invoice_items (
     total_cost DECIMAL(14, 2) NOT NULL
 );
 
--- 14. Purchase Returns Table
+-- 15. Purchase Returns Table
 CREATE TABLE purchase_returns (
     return_id SERIAL PRIMARY KEY,
     original_purchase_invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(purchase_invoice_id),
@@ -362,7 +434,7 @@ CREATE TABLE purchase_returns (
     notes TEXT
 );
 
--- 15. Purchase Return Items Table
+-- 16. Purchase Return Items Table
 CREATE TABLE purchase_return_items (
     item_id SERIAL PRIMARY KEY,
     return_id INTEGER NOT NULL REFERENCES purchase_returns(return_id),
@@ -372,7 +444,7 @@ CREATE TABLE purchase_return_items (
     total DECIMAL(14, 2) NOT NULL
 );
 
--- 16. Customer Payments Table
+-- 17. Customer Payments Table
 CREATE TABLE customer_payments (
     payment_id SERIAL PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
@@ -382,7 +454,7 @@ CREATE TABLE customer_payments (
     notes TEXT
 );
 
--- 17. Supplier Payments Table
+-- 18. Supplier Payments Table
 CREATE TABLE supplier_payments (
     payment_id SERIAL PRIMARY KEY,
     supplier_id INTEGER NOT NULL REFERENCES suppliers(supplier_id),
@@ -392,7 +464,7 @@ CREATE TABLE supplier_payments (
     notes TEXT
 );
 
--- 18. Cash Transactions Table
+-- 19. Cash Transactions Table
 CREATE TABLE cash_transactions (
     transaction_id SERIAL PRIMARY KEY,
     transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
@@ -455,7 +527,7 @@ WHERE s.current_balance > 0
     OR (CURRENT_DATE - s.last_payment_date::date) > s.payment_terms
   );
 
--- 19. Expenses Table
+-- 20. Expenses Table
 CREATE TABLE expenses (
     expense_id SERIAL PRIMARY KEY,
     expense_category VARCHAR(100) NOT NULL,
@@ -465,7 +537,7 @@ CREATE TABLE expenses (
     notes TEXT
 );
 
--- 20. Waste Table
+-- 21. Waste Table
 CREATE TABLE waste (
     waste_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -476,7 +548,7 @@ CREATE TABLE waste (
     notes TEXT
 );
 
--- 21. Warehouse Transfers Table
+-- 22. Warehouse Transfers Table
 CREATE TABLE warehouse_transfers (
     transfer_id SERIAL PRIMARY KEY,
     from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
@@ -493,7 +565,7 @@ CREATE TABLE warehouse_transfers (
 -- Views: v_sales_profit, v_profit_and_loss, v_account_balances
 -- ============================================================
 
--- 22. Chart of Accounts Table
+-- 23. Chart of Accounts Table
 CREATE TABLE accounts (
     account_id SERIAL PRIMARY KEY,
     account_code VARCHAR(20) NOT NULL UNIQUE,
@@ -507,7 +579,7 @@ CREATE TABLE accounts (
     notes TEXT
 );
 
--- 23. Ledger Entries Table (Double-Entry Audit Trail)
+-- 24. Ledger Entries Table (Double-Entry Audit Trail)
 CREATE TABLE ledger_entries (
     entry_id SERIAL PRIMARY KEY,
     entry_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -546,7 +618,6 @@ GROUP BY a.account_id, a.account_code, a.account_name, a.account_type;
 
 -- ============================================================
 -- View: Profit per sales invoice item
--- Revenue - COGS = Gross Profit
 -- ============================================================
 CREATE OR REPLACE VIEW v_sales_profit AS
 SELECT
@@ -567,7 +638,7 @@ JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
 JOIN products p ON p.product_id = sii.product_id;
 
 -- ============================================================
--- View: Profit & Loss Summary (for a period, use WHERE on dates)
+-- View: Profit & Loss Summary
 -- ============================================================
 CREATE OR REPLACE VIEW v_profit_and_loss AS
 SELECT
@@ -586,7 +657,7 @@ SELECT
               JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
     - COALESCE((SELECT SUM(amount) FROM expenses), 0) AS net_profit;
 
--- 24. Users Table
+-- 25. Users Table
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
@@ -597,7 +668,7 @@ CREATE TABLE users (
     last_login TIMESTAMP
 );
 
--- 25. Activity Logs Table
+-- 26. Activity Logs Table
 CREATE TABLE activity_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(user_id),
@@ -614,6 +685,7 @@ CREATE TABLE activity_logs (
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_barcode ON products(barcode);
 CREATE INDEX idx_products_meter_based ON products(is_meter_based);
+CREATE INDEX idx_product_conversions_product ON product_unit_conversions(product_id);
 CREATE INDEX idx_inventory_cache_product ON inventory_cache(product_id);
 CREATE INDEX idx_inventory_cache_warehouse ON inventory_cache(warehouse_id);
 CREATE INDEX idx_inventory_transactions_product ON inventory_transactions(product_id);
