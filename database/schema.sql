@@ -50,11 +50,19 @@ CREATE TABLE inventory_transactions (
     )),
     direction VARCHAR(3) NOT NULL CHECK (direction IN ('IN', 'OUT')),
     quantity DECIMAL(14, 4) NOT NULL CHECK (quantity > 0),
+    unit_type VARCHAR(20) NOT NULL CHECK (unit_type IN ('meter', 'piece', 'carton')),
+    cost_per_unit DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    warehouse_from INTEGER REFERENCES warehouses(warehouse_id),
+    warehouse_to INTEGER REFERENCES warehouses(warehouse_id),
     reference_type VARCHAR(50),
     reference_id INTEGER,
     notes TEXT,
     created_by INTEGER,
-    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_transfer_warehouses CHECK (
+        (transaction_type = 'warehouse_transfer' AND warehouse_from IS NOT NULL AND warehouse_to IS NOT NULL)
+        OR (transaction_type != 'warehouse_transfer' AND warehouse_from IS NULL AND warehouse_to IS NULL)
+    )
 );
 
 -- 5. Inventory Cache Table (AUTO-UPDATED, NOT MANUALLY EDITED)
@@ -78,6 +86,23 @@ SELECT
     COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
     - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0) AS available_quantity,
     MAX(created_date) AS last_transaction_date
+FROM inventory_transactions
+GROUP BY product_id, warehouse_id;
+
+-- ============================================================
+-- View: Weighted average cost per product per warehouse
+-- Used for accurate profit calculations
+-- ============================================================
+CREATE OR REPLACE VIEW v_product_avg_cost AS
+SELECT
+    product_id,
+    warehouse_id,
+    CASE
+        WHEN SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END) > 0
+        THEN SUM(CASE WHEN direction = 'IN' THEN quantity * cost_per_unit ELSE 0 END)
+             / SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END)
+        ELSE 0
+    END AS weighted_avg_cost
 FROM inventory_transactions
 GROUP BY product_id, warehouse_id;
 
@@ -355,6 +380,9 @@ CREATE INDEX idx_inventory_transactions_warehouse ON inventory_transactions(ware
 CREATE INDEX idx_inventory_transactions_type ON inventory_transactions(transaction_type);
 CREATE INDEX idx_inventory_transactions_direction ON inventory_transactions(direction);
 CREATE INDEX idx_inventory_transactions_product_warehouse ON inventory_transactions(product_id, warehouse_id);
+CREATE INDEX idx_inventory_transactions_cost ON inventory_transactions(cost_per_unit);
+CREATE INDEX idx_inventory_transactions_warehouse_from ON inventory_transactions(warehouse_from);
+CREATE INDEX idx_inventory_transactions_warehouse_to ON inventory_transactions(warehouse_to);
 CREATE INDEX idx_sales_invoices_customer ON sales_invoices(customer_id);
 CREATE INDEX idx_sales_invoices_date ON sales_invoices(invoice_date);
 CREATE INDEX idx_sales_invoice_items_invoice ON sales_invoice_items(invoice_id);
