@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:password@localhost:5432/ceramic_erp"
+    redis_url: str = "redis://localhost:6379/0"
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 480
     debug: bool = False

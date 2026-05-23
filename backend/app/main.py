@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
-from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="2.2.0",
+    version="2.3.0",
     description="ERP system for ceramic showroom management",
 )
 
@@ -22,6 +22,7 @@ app.add_middleware(
 app.add_exception_handler(AppError, app_error_handler)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
@@ -37,9 +38,11 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "2.2.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "2.3.0"}
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    from app.core.redis import get_redis
+    redis_ok = get_redis().ping()
+    return {"status": "healthy", "redis": "connected" if redis_ok else "disconnected"}
