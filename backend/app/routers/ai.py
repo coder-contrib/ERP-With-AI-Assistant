@@ -15,17 +15,35 @@ class ToolRequest(BaseModel):
     params: dict = {}
 
 
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
+class QueryRequest(BaseModel):
+    query: str
+    session_id: str | None = None
 
+
+# --- TOOL EXECUTION ---
 
 @router.post("/tool")
 def execute_ai_tool(data: ToolRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     service = AIService(db)
-    result = service.execute_tool(data.agent, data.tool, data.params)
-    return result
+    return service.execute_tool(data.agent, data.tool, data.params)
 
+
+@router.post("/query")
+def ai_query(data: QueryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    routing = service.classify_and_route(data.query)
+    context = service.search_context(data.query)
+    if data.session_id:
+        memory = service.get_memory(data.session_id)
+        memory.add_user_message(data.query)
+    return {
+        "routing": routing,
+        "context": context,
+        "session_id": data.session_id,
+    }
+
+
+# --- AGENTS ---
 
 @router.get("/agents")
 def list_agents(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -38,6 +56,48 @@ def list_agents(current_user: User = Depends(get_current_user), db: Session = De
         for agent_type, agent in service.agents.items()
     }
 
+
+# --- PREDICTIONS ---
+
+@router.get("/predict/demand/{product_id}")
+def predict_demand(product_id: int, days_back: int = 30, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.demand_forecast(product_id, days_back)
+
+
+@router.get("/predict/low-stock")
+def predict_low_stock(days_ahead: int = 7, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.low_stock_prediction(days_ahead)
+
+
+@router.get("/predict/trending")
+def predict_trending(days_back: int = 30, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.best_selling_prediction(days_back)
+
+
+@router.get("/predict/customer/{customer_id}")
+def predict_customer_behavior(customer_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.customer_behavior(customer_id)
+
+
+@router.get("/analyze/profit")
+def analyze_profit(start_date: str, end_date: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.profit_analysis(start_date, end_date)
+
+
+# --- SEARCH / RAG ---
+
+@router.get("/search")
+def ai_search(query: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = AIService(db)
+    return service.search_context(query)
+
+
+# --- CONVERSATION MEMORY ---
 
 @router.get("/conversation/{session_id}")
 def get_conversation(session_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
