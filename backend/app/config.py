@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:password@localhost:5432/ceramic_erp"
     secret_key: str = "change-me"
+    access_token_expire_minutes: int = 480
     debug: bool = False
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 

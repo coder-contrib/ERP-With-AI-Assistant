@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
-from app.routers import products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="2.0.0",
-    description="ERP system for ceramic showroom management",
+    version="2.1.0",
+    description="ERP system for ceramic showroom management with JWT authentication",
 )
 
 app.add_middleware(
@@ -21,6 +21,7 @@ app.add_middleware(
 
 app.add_exception_handler(AppError, app_error_handler)
 
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
@@ -35,7 +36,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "2.0.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "2.1.0"}
 
 
 @app.get("/health")
