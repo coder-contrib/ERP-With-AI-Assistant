@@ -324,14 +324,26 @@ CREATE TABLE cash_transactions (
     transaction_id SERIAL PRIMARY KEY,
     transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
     amount DECIMAL(14, 2) NOT NULL,
-    source VARCHAR(30) NOT NULL CHECK (source IN (
-        'sales', 'customer_payments', 'supplier_payments',
-        'expenses', 'refunds', 'purchase_payments'
+    entity_type VARCHAR(30) NOT NULL CHECK (entity_type IN (
+        'sales_invoice', 'purchase_invoice', 'customer_payment',
+        'supplier_payment', 'expense', 'sales_return', 'purchase_return'
     )),
-    reference_id INTEGER,
+    entity_id INTEGER NOT NULL,
     description TEXT,
+    created_by INTEGER,
     transaction_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================================
+-- View: Cash balance calculated from all cash transactions
+-- ============================================================
+CREATE OR REPLACE VIEW v_cash_balance AS
+SELECT
+    COALESCE(SUM(CASE WHEN transaction_type = 'cash_in' THEN amount ELSE 0 END), 0)
+    - COALESCE(SUM(CASE WHEN transaction_type = 'cash_out' THEN amount ELSE 0 END), 0) AS current_balance,
+    COUNT(*) AS total_transactions,
+    MAX(transaction_date) AS last_transaction_date
+FROM cash_transactions;
 
 -- 19. Expenses Table
 CREATE TABLE expenses (
@@ -427,6 +439,7 @@ CREATE INDEX idx_customer_payments_customer ON customer_payments(customer_id);
 CREATE INDEX idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX idx_cash_transactions_type ON cash_transactions(transaction_type);
 CREATE INDEX idx_cash_transactions_date ON cash_transactions(transaction_date);
+CREATE INDEX idx_cash_transactions_entity ON cash_transactions(entity_type, entity_id);
 CREATE INDEX idx_activity_logs_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_logs_date ON activity_logs(action_date);
 
