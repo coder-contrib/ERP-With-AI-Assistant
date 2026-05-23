@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../core/theme/app_theme.dart';
-import '../data/dashboard_repository.dart';
+import 'package:ceramic_erp/core/theme/app_theme.dart';
+import '../../data/dashboard_repository.dart';
 
 class ProfitChart extends StatelessWidget {
   final List<MonthlyProfitData> data;

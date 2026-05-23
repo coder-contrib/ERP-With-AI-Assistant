@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
-import '../data/dashboard_repository.dart';
+import 'package:ceramic_erp/core/theme/app_theme.dart';
+import '../../data/dashboard_repository.dart';
 
 class AIInsightsWidget extends StatelessWidget {
   final List<AIInsight> insights;
