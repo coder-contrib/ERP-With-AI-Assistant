@@ -1,55 +1,44 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from app.database import get_db
-from app.models.categories import Category
+from app.schemas.categories import CategoryCreate, CategoryUpdate, CategoryResponse
+from app.repositories.category_repo import CategoryRepository
+from app.core.exceptions import NotFoundError
 
 router = APIRouter()
 
 
-class CategoryCreate(BaseModel):
-    category_name: str
-    description: str | None = None
-
-
-class CategoryResponse(BaseModel):
-    category_id: int
-    category_name: str
-    description: str | None
-
-    class Config:
-        from_attributes = True
-
-
 @router.get("/", response_model=list[CategoryResponse])
 def list_categories(db: Session = Depends(get_db)):
-    return db.query(Category).all()
+    repo = CategoryRepository(db)
+    return repo.get_all()
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)
 def get_category(category_id: int, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.category_id == category_id).first()
+    repo = CategoryRepository(db)
+    category = repo.get_by_id(category_id)
     if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise NotFoundError("Category not found")
     return category
 
 
 @router.post("/", response_model=CategoryResponse, status_code=201)
 def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
-    category = Category(**data.model_dump())
-    db.add(category)
+    repo = CategoryRepository(db)
+    category = repo.create(**data.model_dump())
     db.commit()
     db.refresh(category)
     return category
 
 
 @router.put("/{category_id}", response_model=CategoryResponse)
-def update_category(category_id: int, data: CategoryCreate, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.category_id == category_id).first()
+def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db)):
+    repo = CategoryRepository(db)
+    category = repo.get_by_id(category_id)
     if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
-    for key, value in data.model_dump().items():
-        setattr(category, key, value)
+        raise NotFoundError("Category not found")
+    category = repo.update(category, **data.model_dump(exclude_unset=True))
     db.commit()
     db.refresh(category)
     return category
@@ -57,9 +46,10 @@ def update_category(category_id: int, data: CategoryCreate, db: Session = Depend
 
 @router.delete("/{category_id}")
 def delete_category(category_id: int, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.category_id == category_id).first()
+    repo = CategoryRepository(db)
+    category = repo.get_by_id(category_id)
     if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
-    db.delete(category)
+        raise NotFoundError("Category not found")
+    repo.delete(category)
     db.commit()
     return {"detail": "Category deleted"}

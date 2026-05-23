@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.core.exceptions import AppError
+from app.core.middleware import app_error_handler
 from app.routers import products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="1.0.0",
+    version="2.0.0",
     description="ERP system for ceramic showroom management",
 )
 
@@ -16,6 +18,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(AppError, app_error_handler)
 
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
@@ -31,7 +35,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "1.0.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "2.0.0"}
 
 
 @app.get("/health")

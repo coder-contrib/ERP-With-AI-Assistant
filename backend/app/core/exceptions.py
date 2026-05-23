@@ -1,0 +1,19 @@
+class AppError(Exception):
+    def __init__(self, message: str, status_code: int = 400):
+        self.message = message
+        self.status_code = status_code
+
+
+class NotFoundError(AppError):
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(message, status_code=404)
+
+
+class ValidationError(AppError):
+    def __init__(self, message: str = "Validation failed"):
+        super().__init__(message, status_code=422)
+
+
+class PermissionError(AppError):
+    def __init__(self, message: str = "Permission denied"):
+        super().__init__(message, status_code=403)
