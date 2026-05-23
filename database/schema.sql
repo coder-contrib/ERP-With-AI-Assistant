@@ -9,6 +9,14 @@
 --    entity_type = 'opening_balance'.
 -- 4. The inventory_cache table is only a performance cache.
 -- 5. cost_per_unit on every transaction enables accurate COGS and profit.
+-- 6. Three engines: Inventory Engine, Cash Engine, Accounting Engine.
+-- 7. Ledger entries provide full double-entry audit trail.
+-- ============================================================
+
+-- ============================================================
+-- ENGINE 1: INVENTORY ENGINE
+-- Tables: products, warehouses, inventory_transactions, inventory_cache
+-- Views: v_current_stock, v_product_avg_cost, v_product_details
 -- ============================================================
 
 -- 1. Categories Table
@@ -47,9 +55,6 @@ CREATE TABLE warehouses (
 );
 
 -- 4. Inventory Transactions Table (SOURCE OF TRUTH)
--- Opening stock is recorded here as transaction_type = 'opening_stock'
--- with direction = 'IN'. No separate opening_balances table needed for inventory.
--- cost_per_unit is recorded on EVERY transaction for COGS calculation.
 CREATE TABLE inventory_transactions (
     transaction_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -88,7 +93,6 @@ CREATE TABLE inventory_cache (
 
 -- ============================================================
 -- View: Real-time stock calculated from transactions
--- This is the AUTHORITATIVE stock level
 -- ============================================================
 CREATE OR REPLACE VIEW v_current_stock AS
 SELECT
@@ -102,8 +106,6 @@ GROUP BY product_id, warehouse_id;
 
 -- ============================================================
 -- View: Weighted average cost per product per warehouse (COGS basis)
--- Formula: total_cost_of_inflows / total_quantity_of_inflows
--- Used for: profit calculation, inventory valuation, COGS
 -- ============================================================
 CREATE OR REPLACE VIEW v_product_avg_cost AS
 SELECT
@@ -121,30 +123,7 @@ FROM inventory_transactions
 GROUP BY product_id, warehouse_id;
 
 -- ============================================================
--- View: Profit per sales invoice item
--- Revenue - COGS = Gross Profit
--- ============================================================
-CREATE OR REPLACE VIEW v_sales_profit AS
-SELECT
-    si.invoice_id,
-    si.invoice_number,
-    si.invoice_date,
-    sii.item_id,
-    sii.product_id,
-    p.product_name,
-    sii.sold_quantity,
-    sii.unit_price,
-    sii.total_price AS revenue,
-    sii.cost_at_sale,
-    (sii.sold_quantity * sii.cost_at_sale) AS cogs,
-    sii.total_price - (sii.sold_quantity * sii.cost_at_sale) AS gross_profit
-FROM sales_invoice_items sii
-JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
-JOIN products p ON p.product_id = sii.product_id;
-
--- ============================================================
--- View: Product with stock and conversion info
--- Combines product details with per-product conversion rules
+-- View: Product with category and conversion info
 -- ============================================================
 CREATE OR REPLACE VIEW v_product_details AS
 SELECT
@@ -230,6 +209,12 @@ BEGIN
     GROUP BY product_id, warehouse_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- ENGINE 2: CASH ENGINE
+-- Tables: cash_transactions, customer_payments, supplier_payments
+-- Views: v_cash_balance
+-- ============================================================
 
 -- 6. Customers Table
 CREATE TABLE customers (
@@ -378,8 +363,6 @@ CREATE TABLE supplier_payments (
 );
 
 -- 18. Cash Transactions Table
--- Opening cash balance is recorded here as entity_type = 'opening_balance'
--- No separate opening_balances table needed for cash.
 CREATE TABLE cash_transactions (
     transaction_id SERIAL PRIMARY KEY,
     transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
@@ -396,7 +379,7 @@ CREATE TABLE cash_transactions (
 );
 
 -- ============================================================
--- View: Cash balance calculated from all cash transactions
+-- View: Cash balance
 -- ============================================================
 CREATE OR REPLACE VIEW v_cash_balance AS
 SELECT
@@ -408,7 +391,6 @@ FROM cash_transactions;
 
 -- ============================================================
 -- View: Customers exceeding credit limit
--- Used by app to block or warn on credit sales
 -- ============================================================
 CREATE OR REPLACE VIEW v_customers_over_limit AS
 SELECT
@@ -475,7 +457,106 @@ CREATE TABLE warehouse_transfers (
     notes TEXT
 );
 
--- 22. Users Table
+-- ============================================================
+-- ENGINE 3: ACCOUNTING ENGINE (Profit & Loss + Ledger)
+-- Tables: accounts, ledger_entries
+-- Views: v_sales_profit, v_profit_and_loss, v_account_balances
+-- ============================================================
+
+-- 22. Chart of Accounts Table
+CREATE TABLE accounts (
+    account_id SERIAL PRIMARY KEY,
+    account_code VARCHAR(20) NOT NULL UNIQUE,
+    account_name VARCHAR(200) NOT NULL,
+    account_type VARCHAR(20) NOT NULL CHECK (account_type IN (
+        'asset', 'liability', 'equity', 'revenue', 'expense'
+    )),
+    parent_account_id INTEGER REFERENCES accounts(account_id),
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    active_status BOOLEAN NOT NULL DEFAULT TRUE,
+    notes TEXT
+);
+
+-- 23. Ledger Entries Table (Double-Entry Audit Trail)
+CREATE TABLE ledger_entries (
+    entry_id SERIAL PRIMARY KEY,
+    entry_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    account_id INTEGER NOT NULL REFERENCES accounts(account_id),
+    debit DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    credit DECIMAL(14, 2) NOT NULL DEFAULT 0,
+    entity_type VARCHAR(30) NOT NULL,
+    entity_id INTEGER NOT NULL,
+    description TEXT,
+    created_by INTEGER,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_debit_or_credit CHECK (
+        (debit > 0 AND credit = 0) OR (debit = 0 AND credit > 0)
+    )
+);
+
+-- ============================================================
+-- View: Account balances
+-- ============================================================
+CREATE OR REPLACE VIEW v_account_balances AS
+SELECT
+    a.account_id,
+    a.account_code,
+    a.account_name,
+    a.account_type,
+    COALESCE(SUM(le.debit), 0) AS total_debit,
+    COALESCE(SUM(le.credit), 0) AS total_credit,
+    CASE
+        WHEN a.account_type IN ('asset', 'expense')
+        THEN COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0)
+        ELSE COALESCE(SUM(le.credit), 0) - COALESCE(SUM(le.debit), 0)
+    END AS balance
+FROM accounts a
+LEFT JOIN ledger_entries le ON le.account_id = a.account_id
+GROUP BY a.account_id, a.account_code, a.account_name, a.account_type;
+
+-- ============================================================
+-- View: Profit per sales invoice item
+-- Revenue - COGS = Gross Profit
+-- ============================================================
+CREATE OR REPLACE VIEW v_sales_profit AS
+SELECT
+    si.invoice_id,
+    si.invoice_number,
+    si.invoice_date,
+    sii.item_id,
+    sii.product_id,
+    p.product_name,
+    sii.sold_quantity,
+    sii.unit_price,
+    sii.total_price AS revenue,
+    sii.cost_at_sale,
+    (sii.sold_quantity * sii.cost_at_sale) AS cogs,
+    sii.total_price - (sii.sold_quantity * sii.cost_at_sale) AS gross_profit
+FROM sales_invoice_items sii
+JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
+JOIN products p ON p.product_id = sii.product_id;
+
+-- ============================================================
+-- View: Profit & Loss Summary (for a period, use WHERE on dates)
+-- ============================================================
+CREATE OR REPLACE VIEW v_profit_and_loss AS
+SELECT
+    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS total_revenue,
+    COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS total_cogs,
+    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
+    - COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0) AS gross_profit,
+    COALESCE((SELECT SUM(amount) FROM expenses), 0) AS total_expenses,
+    COALESCE((SELECT SUM(total_price) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
+    - COALESCE((SELECT SUM(sold_quantity * cost_at_sale) FROM sales_invoice_items sii
+              JOIN sales_invoices si ON si.invoice_id = sii.invoice_id), 0)
+    - COALESCE((SELECT SUM(amount) FROM expenses), 0) AS net_profit;
+
+-- 24. Users Table
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
@@ -486,7 +567,7 @@ CREATE TABLE users (
     last_login TIMESTAMP
 );
 
--- 23. Activity Logs Table
+-- 25. Activity Logs Table
 CREATE TABLE activity_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(user_id),
@@ -526,6 +607,9 @@ CREATE INDEX idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX idx_cash_transactions_type ON cash_transactions(transaction_type);
 CREATE INDEX idx_cash_transactions_date ON cash_transactions(transaction_date);
 CREATE INDEX idx_cash_transactions_entity ON cash_transactions(entity_type, entity_id);
+CREATE INDEX idx_ledger_entries_account ON ledger_entries(account_id);
+CREATE INDEX idx_ledger_entries_date ON ledger_entries(entry_date);
+CREATE INDEX idx_ledger_entries_entity ON ledger_entries(entity_type, entity_id);
 CREATE INDEX idx_activity_logs_user ON activity_logs(user_id);
 CREATE INDEX idx_activity_logs_date ON activity_logs(action_date);
 
@@ -547,3 +631,25 @@ INSERT INTO categories (category_name, description) VALUES
 INSERT INTO warehouses (warehouse_name, warehouse_location, notes) VALUES
     ('Main Warehouse', 'Main Branch', 'Primary storage facility'),
     ('Secondary Warehouse', 'Secondary Branch', 'Overflow storage');
+
+-- ============================================================
+-- Sample Data: Chart of Accounts (Default Accounts)
+-- ============================================================
+
+INSERT INTO accounts (account_code, account_name, account_type, is_system) VALUES
+    ('1000', 'Cash', 'asset', TRUE),
+    ('1100', 'Accounts Receivable', 'asset', TRUE),
+    ('1200', 'Inventory', 'asset', TRUE),
+    ('2000', 'Accounts Payable', 'liability', TRUE),
+    ('3000', 'Owner Equity', 'equity', TRUE),
+    ('4000', 'Sales Revenue', 'revenue', TRUE),
+    ('4100', 'Sales Returns', 'revenue', TRUE),
+    ('5000', 'Cost of Goods Sold', 'expense', TRUE),
+    ('5100', 'Purchase Returns', 'expense', TRUE),
+    ('6000', 'Operating Expenses', 'expense', TRUE),
+    ('6100', 'Rent Expense', 'expense', FALSE),
+    ('6200', 'Salaries Expense', 'expense', FALSE),
+    ('6300', 'Utilities Expense', 'expense', FALSE),
+    ('6400', 'Transportation Expense', 'expense', FALSE),
+    ('6500', 'Maintenance Expense', 'expense', FALSE),
+    ('7000', 'Waste & Loss', 'expense', TRUE);
