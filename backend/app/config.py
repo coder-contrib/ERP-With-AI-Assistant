@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/1"
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 480
+    anthropic_api_key: str = ""
+    ai_model: str = "claude-sonnet-4-20250514"
     debug: bool = False
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
