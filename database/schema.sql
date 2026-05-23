@@ -2,6 +2,9 @@
 -- Ceramic Showroom ERP Database Structure
 -- PostgreSQL Schema
 -- ============================================================
+-- DESIGN PRINCIPLE: inventory_transactions is the SOURCE OF TRUTH
+-- for all stock. The inventory table is only a performance cache.
+-- ============================================================
 
 -- 1. Categories Table
 CREATE TABLE categories (
@@ -36,18 +39,7 @@ CREATE TABLE warehouses (
     notes TEXT
 );
 
--- 4. Inventory Table
-CREATE TABLE inventory (
-    inventory_id SERIAL PRIMARY KEY,
-    product_id INTEGER NOT NULL REFERENCES products(product_id),
-    warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
-    available_quantity DECIMAL(14, 4) NOT NULL DEFAULT 0,
-    last_updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT,
-    UNIQUE (product_id, warehouse_id)
-);
-
--- 5. Inventory Transactions Table
+-- 4. Inventory Transactions Table (SOURCE OF TRUTH)
 CREATE TABLE inventory_transactions (
     transaction_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -56,12 +48,85 @@ CREATE TABLE inventory_transactions (
         'opening_stock', 'purchase', 'sale', 'sales_return',
         'purchase_return', 'waste', 'warehouse_transfer'
     )),
-    quantity DECIMAL(14, 4) NOT NULL,
+    direction VARCHAR(3) NOT NULL CHECK (direction IN ('IN', 'OUT')),
+    quantity DECIMAL(14, 4) NOT NULL CHECK (quantity > 0),
     reference_type VARCHAR(50),
     reference_id INTEGER,
     notes TEXT,
+    created_by INTEGER,
     created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 5. Inventory Cache Table (AUTO-UPDATED, NOT MANUALLY EDITED)
+CREATE TABLE inventory_cache (
+    inventory_id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
+    cached_quantity DECIMAL(14, 4) NOT NULL DEFAULT 0,
+    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (product_id, warehouse_id)
+);
+
+-- ============================================================
+-- View: Real-time stock calculated from transactions
+-- This is the AUTHORITATIVE stock level
+-- ============================================================
+CREATE OR REPLACE VIEW v_current_stock AS
+SELECT
+    product_id,
+    warehouse_id,
+    COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
+    - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0) AS available_quantity,
+    MAX(created_date) AS last_transaction_date
+FROM inventory_transactions
+GROUP BY product_id, warehouse_id;
+
+-- ============================================================
+-- Trigger: Auto-update inventory_cache after each transaction
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_update_inventory_cache()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, last_updated)
+    SELECT
+        NEW.product_id,
+        NEW.warehouse_id,
+        COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
+        NOW()
+    FROM inventory_transactions
+    WHERE product_id = NEW.product_id AND warehouse_id = NEW.warehouse_id
+    ON CONFLICT (product_id, warehouse_id)
+    DO UPDATE SET
+        cached_quantity = EXCLUDED.cached_quantity,
+        last_updated = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_inventory_cache
+AFTER INSERT ON inventory_transactions
+FOR EACH ROW
+EXECUTE FUNCTION fn_update_inventory_cache();
+
+-- ============================================================
+-- Function: Full cache refresh (run periodically or on demand)
+-- ============================================================
+CREATE OR REPLACE FUNCTION fn_refresh_inventory_cache()
+RETURNS VOID AS $$
+BEGIN
+    TRUNCATE inventory_cache;
+    INSERT INTO inventory_cache (product_id, warehouse_id, cached_quantity, last_updated)
+    SELECT
+        product_id,
+        warehouse_id,
+        COALESCE(SUM(CASE WHEN direction = 'IN' THEN quantity ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN direction = 'OUT' THEN quantity ELSE 0 END), 0),
+        NOW()
+    FROM inventory_transactions
+    GROUP BY product_id, warehouse_id;
+END;
+$$ LANGUAGE plpgsql;
 
 -- 6. Customers Table
 CREATE TABLE customers (
@@ -283,11 +348,13 @@ CREATE TABLE activity_logs (
 
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_barcode ON products(barcode);
-CREATE INDEX idx_inventory_product ON inventory(product_id);
-CREATE INDEX idx_inventory_warehouse ON inventory(warehouse_id);
+CREATE INDEX idx_inventory_cache_product ON inventory_cache(product_id);
+CREATE INDEX idx_inventory_cache_warehouse ON inventory_cache(warehouse_id);
 CREATE INDEX idx_inventory_transactions_product ON inventory_transactions(product_id);
 CREATE INDEX idx_inventory_transactions_warehouse ON inventory_transactions(warehouse_id);
 CREATE INDEX idx_inventory_transactions_type ON inventory_transactions(transaction_type);
+CREATE INDEX idx_inventory_transactions_direction ON inventory_transactions(direction);
+CREATE INDEX idx_inventory_transactions_product_warehouse ON inventory_transactions(product_id, warehouse_id);
 CREATE INDEX idx_sales_invoices_customer ON sales_invoices(customer_id);
 CREATE INDEX idx_sales_invoices_date ON sales_invoices(invoice_date);
 CREATE INDEX idx_sales_invoice_items_invoice ON sales_invoice_items(invoice_id);
