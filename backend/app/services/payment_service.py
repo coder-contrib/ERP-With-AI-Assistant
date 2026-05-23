@@ -6,6 +6,7 @@ from app.repositories.customer_repo import CustomerRepository
 from app.repositories.supplier_repo import SupplierRepository
 from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
+from app.core.validators import Validator
 from app.schemas.payments import CustomerPaymentCreate, SupplierPaymentCreate
 from app.core.exceptions import NotFoundError
 
@@ -18,9 +19,12 @@ class PaymentService:
         self.supplier_repo = SupplierRepository(db)
         self.cash = CashService(db)
         self.ledger = LedgerService(db)
+        self.validator = Validator(db)
 
     def receive_customer_payment(self, data: CustomerPaymentCreate) -> int:
         with transaction(self.db):
+            self.validator.validate_positive_amount(data.payment_amount, "Payment amount")
+
             customer = self.customer_repo.get_by_id(data.customer_id)
             if not customer:
                 raise NotFoundError("Customer not found")
@@ -44,6 +48,8 @@ class PaymentService:
 
     def make_supplier_payment(self, data: SupplierPaymentCreate) -> int:
         with transaction(self.db):
+            self.validator.validate_positive_amount(data.payment_amount, "Payment amount")
+
             supplier = self.supplier_repo.get_by_id(data.supplier_id)
             if not supplier:
                 raise NotFoundError("Supplier not found")
