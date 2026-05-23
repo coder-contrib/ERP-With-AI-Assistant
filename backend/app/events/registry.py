@@ -5,16 +5,28 @@ from app.events.payment_events import PAYMENT_RECEIVED, PAYMENT_MADE, EXPENSE_CR
 from app.events.inventory_events import INVENTORY_TRANSFER
 from app.events.handlers.analytics_handler import handle_analytics
 from app.events.handlers.ai_handler import handle_ai_event
+from app.events.handlers.realtime_handler import (
+    handle_realtime_sale,
+    handle_realtime_inventory,
+    handle_realtime_notification,
+    handle_realtime_payment,
+)
 
 
 def register_event_handlers():
-    """Register all event handlers with the event bus.
-    Called once at application startup.
-    """
+    """Register all event handlers with the event bus."""
     bus = get_event_bus()
 
-    # Analytics handler listens to ALL events
+    # Analytics + AI: listen to ALL events
     bus.subscribe_all(handle_analytics)
-
-    # AI handler listens to ALL events for context building
     bus.subscribe_all(handle_ai_event)
+
+    # Real-time WebSocket handlers
+    bus.subscribe(SALE_CREATED, handle_realtime_sale)
+    bus.subscribe(PURCHASE_CREATED, handle_realtime_inventory)
+    bus.subscribe(PAYMENT_RECEIVED, handle_realtime_payment)
+    bus.subscribe(PAYMENT_MADE, handle_realtime_payment)
+    bus.subscribe(EXPENSE_CREATED, handle_realtime_notification)
+
+    # All events push to notifications channel
+    bus.subscribe_all(handle_realtime_notification)

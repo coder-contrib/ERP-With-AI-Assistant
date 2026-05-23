@@ -4,12 +4,12 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
 from app.events.registry import register_event_handlers
-from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="3.4.0",
-    description="Event-driven ERP with AI assistant and pgvector semantic search",
+    version="4.0.0",
+    description="Real-time event-driven ERP with AI and WebSocket support",
 )
 
 app.add_middleware(
@@ -23,6 +23,7 @@ app.add_middleware(
 app.add_exception_handler(AppError, app_error_handler)
 register_event_handlers()
 
+# REST API routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
@@ -42,14 +43,19 @@ app.include_router(expenses.router, prefix="/api/expenses", tags=["Expenses"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Background Tasks"])
 
+# WebSocket routers
+app.include_router(ws.router, tags=["WebSocket"])
+
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "3.4.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "4.0.0"}
 
 
 @app.get("/health")
 def health_check():
     from app.core.redis import get_redis
+    from app.core.websocket import get_ws_manager
     redis_ok = get_redis().ping()
-    return {"status": "healthy", "redis": "connected" if redis_ok else "disconnected"}
+    ws_count = get_ws_manager().active_connections
+    return {"status": "healthy", "redis": "connected" if redis_ok else "disconnected", "websocket_connections": ws_count}

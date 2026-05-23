@@ -25,6 +25,7 @@ dependencies:
   heroicons: ^0.3.0
   toastification: ^1.2.1
   json_annotation: ^4.8.1
+  web_socket_channel: ^2.4.0
 
 dev_dependencies:
   flutter_test:
