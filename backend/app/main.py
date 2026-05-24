@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -6,10 +7,20 @@ from app.core.middleware import app_error_handler
 from app.events.registry import register_event_handlers
 from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws, insights, anomalies, opening_balances
 
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    from app.database import Base, engine
+    import app.models  # noqa: F401 — ensure all models are registered
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title="Ceramic Showroom ERP API",
     version="4.2.0",
     description="Adaptive intelligence ERP with anomaly detection",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
