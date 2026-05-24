@@ -5,6 +5,7 @@ import '../../../core/widgets/skeleton_loader.dart';
 import '../data/inventory_repository.dart';
 import 'inventory_provider.dart';
 import 'inventory_detail_drawer.dart';
+import 'opening_stock_dialog.dart';
 
 class InventoryPage extends ConsumerStatefulWidget {
   const InventoryPage({super.key});
@@ -43,6 +44,16 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
   void _showTransferDialog(InventoryItem item) {
     showDialog(context: context, builder: (_) => _TransferDialog(ref: ref, item: item));
+  }
+
+  void _showOpeningStockDialog() async {
+    final result = await showDialog(
+      context: context,
+      builder: (_) => const OpeningStockDialog(),
+    );
+    if (result == true) {
+      ref.invalidate(inventoryDataProvider);
+    }
   }
 
   @override
@@ -97,6 +108,12 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _showOpeningStockDialog,
+                      icon: const Icon(Icons.inventory_2, size: 18),
+                      label: const Text('Opening Stock'),
+                    ),
+                    const SizedBox(width: 8),
                     IconButton(
                       onPressed: _showAiDialog,
                       icon: const Icon(Icons.smart_toy),
