@@ -87,6 +87,50 @@ class InventoryRepository {
     return (response.data as List).cast<Map<String, dynamic>>();
   }
 
+  Future<Map<String, dynamic>> createOpeningStock({
+    required int productId,
+    required int warehouseId,
+    required double quantity,
+    required String unitType,
+    required double costPerUnit,
+    String? notes,
+  }) async {
+    final response = await _dio.post('/inventory/opening-stock', data: {
+      'product_id': productId,
+      'warehouse_id': warehouseId,
+      'transaction_type': 'opening_stock',
+      'direction': 'in',
+      'quantity': quantity,
+      'unit_type': unitType,
+      'cost_per_unit': costPerUnit,
+      'notes': notes,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createTransaction({
+    required int productId,
+    required int warehouseId,
+    required String transactionType,
+    required String direction,
+    required double quantity,
+    required String unitType,
+    double costPerUnit = 0,
+    String? notes,
+  }) async {
+    final response = await _dio.post('/inventory/transactions', data: {
+      'product_id': productId,
+      'warehouse_id': warehouseId,
+      'transaction_type': transactionType,
+      'direction': direction,
+      'quantity': quantity,
+      'unit_type': unitType,
+      'cost_per_unit': costPerUnit,
+      'notes': notes,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getLowStockPrediction({int daysAhead = 7}) async {
     final response = await _dio.get('/ai/predict/low-stock', queryParameters: {'days_ahead': daysAhead});
     return response.data as Map<String, dynamic>;

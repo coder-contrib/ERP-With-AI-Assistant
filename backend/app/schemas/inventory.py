@@ -16,10 +16,10 @@ class StockResponse(BaseModel):
 class InventoryTransactionCreate(BaseModel):
     product_id: int
     warehouse_id: int
-    transaction_type: str
-    direction: str
+    transaction_type: str = "opening_stock"
+    direction: str = "in"
     quantity: Decimal
-    unit_type: str
+    unit_type: str = "meter"
     cost_per_unit: Decimal = Decimal("0")
     warehouse_from: int | None = None
     warehouse_to: int | None = None
