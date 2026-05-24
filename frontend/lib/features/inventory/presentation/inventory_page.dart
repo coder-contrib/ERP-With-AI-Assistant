@@ -243,10 +243,10 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
   }
 
   String _formatNumber(dynamic value) {
-    final num = (value as num?) ?? 0;
-    if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(1)}M';
-    if (num >= 1000) return '${(num / 1000).toStringAsFixed(1)}K';
-    return num.toStringAsFixed(0);
+    final n = (value is num) ? value.toDouble() : 0.0;
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return n.toStringAsFixed(0);
   }
 }
 
@@ -354,10 +354,8 @@ class _InventoryCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Status indicator bar
             Container(width: 4, height: 50, decoration: BoxDecoration(color: _statusColor, borderRadius: BorderRadius.circular(2))),
             const SizedBox(width: 14),
-            // Product info
             Expanded(
               flex: 3,
               child: Column(
@@ -369,7 +367,6 @@ class _InventoryCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Stock quantity
             SizedBox(
               width: 110,
               child: Column(
@@ -386,7 +383,6 @@ class _InventoryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            // Value
             SizedBox(
               width: 100,
               child: Column(
@@ -399,7 +395,6 @@ class _InventoryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Quick actions
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (action) {
