@@ -12,11 +12,15 @@ class ProductModel {
   final int? categoryId;
   final bool isMeterBased;
   final bool allowPieceSale;
+  final bool allowCartonDisplay;
   final String baseUnit;
   final String purchaseCost;
   final String sellingPrice;
   final String? barcode;
+  final String? productImage;
   final bool activeStatus;
+  final String? createdDate;
+  final String? notes;
 
   ProductModel({
     required this.productId,
@@ -24,11 +28,15 @@ class ProductModel {
     this.categoryId,
     required this.isMeterBased,
     required this.allowPieceSale,
+    required this.allowCartonDisplay,
     required this.baseUnit,
     required this.purchaseCost,
     required this.sellingPrice,
     this.barcode,
+    this.productImage,
     required this.activeStatus,
+    this.createdDate,
+    this.notes,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -38,11 +46,15 @@ class ProductModel {
       categoryId: json['category_id'],
       isMeterBased: json['is_meter_based'] ?? true,
       allowPieceSale: json['allow_piece_sale'] ?? false,
+      allowCartonDisplay: json['allow_carton_display'] ?? true,
       baseUnit: json['base_unit'] ?? 'meter',
       purchaseCost: json['purchase_cost_per_meter']?.toString() ?? '0',
       sellingPrice: json['selling_price']?.toString() ?? '0',
       barcode: json['barcode'],
+      productImage: json['product_image'],
       activeStatus: json['active_status'] ?? true,
+      createdDate: json['created_date'],
+      notes: json['notes'],
     );
   }
 
@@ -51,6 +63,32 @@ class ProductModel {
     final price = double.tryParse(sellingPrice) ?? 0;
     if (price == 0) return 0;
     return ((price - cost) / price * 100);
+  }
+}
+
+class UnitConversionModel {
+  final int conversionId;
+  final int productId;
+  final String fromUnit;
+  final String toUnit;
+  final double factor;
+
+  UnitConversionModel({
+    required this.conversionId,
+    required this.productId,
+    required this.fromUnit,
+    required this.toUnit,
+    required this.factor,
+  });
+
+  factory UnitConversionModel.fromJson(Map<String, dynamic> json) {
+    return UnitConversionModel(
+      conversionId: json['conversion_id'],
+      productId: json['product_id'],
+      fromUnit: json['from_unit'],
+      toUnit: json['to_unit'],
+      factor: double.tryParse(json['factor']?.toString() ?? '0') ?? 0,
+    );
   }
 }
 
@@ -110,6 +148,20 @@ class ProductsRepository {
   Future<ProductModel> update(int id, Map<String, dynamic> data) async {
     final response = await _dio.put('/products/$id', data: data);
     return ProductModel.fromJson(response.data);
+  }
+
+  Future<List<UnitConversionModel>> getConversions(int productId) async {
+    final response = await _dio.get('/products/$productId/conversions');
+    return (response.data as List).map((e) => UnitConversionModel.fromJson(e)).toList();
+  }
+
+  Future<UnitConversionModel> addConversion(int productId, Map<String, dynamic> data) async {
+    final response = await _dio.post('/products/$productId/conversions', data: data);
+    return UnitConversionModel.fromJson(response.data);
+  }
+
+  Future<void> deleteConversion(int productId, int conversionId) async {
+    await _dio.delete('/products/$productId/conversions/$conversionId');
   }
 
   Future<List<StockInfo>> getAllStock() async {
