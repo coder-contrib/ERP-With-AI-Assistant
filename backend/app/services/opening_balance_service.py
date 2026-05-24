@@ -4,12 +4,16 @@ from datetime import date
 from app.models.customers import Customer
 from app.models.suppliers import Supplier
 from app.models.accounting import LedgerEntry
+from app.models.payments import CashTransaction
 from app.services.ledger_service import ACCOUNT_CODES
+from app.services.cache_service import CacheService
+from app.core.redis import get_redis
 
 
 class OpeningBalanceService:
     def __init__(self, db: Session):
         self.db = db
+        self.cache = CacheService(get_redis())
 
     def set_customer_opening_balance(
         self,
@@ -43,6 +47,7 @@ class OpeningBalanceService:
                 description=f"Opening balance (advance) for customer: {customer.customer_name}",
             )
         self.db.add(entry)
+        self.cache.invalidate_dashboard()
 
         return {
             "entity_type": "customer",
@@ -85,6 +90,7 @@ class OpeningBalanceService:
                 description=f"Opening balance (advance) for supplier: {supplier.supplier_name}",
             )
         self.db.add(entry)
+        self.cache.invalidate_dashboard()
 
         return {
             "entity_type": "supplier",
@@ -120,6 +126,17 @@ class OpeningBalanceService:
             description=f"Owner equity from opening balance: {account_name}",
         )
         self.db.add(equity_entry)
+
+        cash_tx = CashTransaction(
+            transaction_type="cash_in",
+            amount=amount,
+            entity_type="opening_balance",
+            entity_id=0,
+            description=f"Opening balance: {account_name}" + (f" - {notes}" if notes else ""),
+        )
+        self.db.add(cash_tx)
+
+        self.cache.invalidate_dashboard()
 
         return {
             "entity_type": "cash",
