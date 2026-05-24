@@ -58,6 +58,7 @@ class AppShell extends ConsumerWidget {
                       _navItem(context, ref, '/purchases', Icons.shopping_cart_rounded, 'Purchases', collapsed),
                       _navItem(context, ref, '/customers', Icons.people_rounded, 'Customers', collapsed),
                       _navItem(context, ref, '/suppliers', Icons.local_shipping_rounded, 'Suppliers', collapsed),
+                      _navItem(context, ref, '/opening-balances', Icons.account_balance_wallet_rounded, 'Opening Balances', collapsed),
                       _navItem(context, ref, '/reports', Icons.bar_chart_rounded, 'Reports', collapsed),
                       _navItem(context, ref, '/notifications', Icons.notifications_rounded, 'Notifications', collapsed),
                       _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Assistant', collapsed),
