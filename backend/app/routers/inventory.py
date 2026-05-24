@@ -24,19 +24,66 @@ def get_product_stock(product_id: int, current_user: User = Depends(require_perm
 @router.post("/transactions", status_code=201)
 def create_transaction(data: InventoryTransactionCreate, current_user: User = Depends(require_permission("inventory:write")), db: Session = Depends(get_db)):
     service = InventoryService(db)
-    result = service.create_transaction(data)
+    tx_type = data.transaction_type.lower()
+    if tx_type == "opening_stock":
+        service.record_opening_stock(
+            product_id=data.product_id,
+            warehouse_id=data.warehouse_id,
+            quantity=data.quantity,
+            unit_type=data.unit_type,
+            cost_per_unit=data.cost_per_unit,
+        )
+    elif tx_type == "sale":
+        service.record_sale(
+            product_id=data.product_id,
+            warehouse_id=data.warehouse_id,
+            quantity=data.quantity,
+            unit_type=data.unit_type,
+            cost_per_unit=data.cost_per_unit,
+            reference_id=data.reference_id or 0,
+        )
+    elif tx_type == "purchase":
+        service.record_purchase(
+            product_id=data.product_id,
+            warehouse_id=data.warehouse_id,
+            quantity=data.quantity,
+            unit_type=data.unit_type,
+            cost_per_unit=data.cost_per_unit,
+            reference_id=data.reference_id or 0,
+        )
+    elif tx_type == "waste":
+        service.record_waste(
+            product_id=data.product_id,
+            warehouse_id=data.warehouse_id,
+            quantity=data.quantity,
+            unit_type=data.unit_type,
+            cost_per_unit=data.cost_per_unit,
+            reference_id=data.reference_id or 0,
+        )
+    else:
+        service.record_opening_stock(
+            product_id=data.product_id,
+            warehouse_id=data.warehouse_id,
+            quantity=data.quantity,
+            unit_type=data.unit_type,
+            cost_per_unit=data.cost_per_unit,
+        )
     db.commit()
-    return result
+    return {"detail": f"Transaction ({tx_type}) recorded successfully"}
 
 
 @router.post("/opening-stock", status_code=201)
 def create_opening_stock(data: InventoryTransactionCreate, current_user: User = Depends(require_permission("inventory:write")), db: Session = Depends(get_db)):
-    data.transaction_type = "opening_stock"
-    data.direction = "in"
     service = InventoryService(db)
-    result = service.create_transaction(data)
+    service.record_opening_stock(
+        product_id=data.product_id,
+        warehouse_id=data.warehouse_id,
+        quantity=data.quantity,
+        unit_type=data.unit_type,
+        cost_per_unit=data.cost_per_unit,
+    )
     db.commit()
-    return result
+    return {"detail": "Opening stock recorded successfully"}
 
 
 @router.post("/refresh-cache")
