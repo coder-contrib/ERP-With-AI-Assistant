@@ -73,7 +73,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Bar
+                // Top Bar - Row 1: Search
                 Row(
                   children: [
                     Expanded(
@@ -89,9 +89,8 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Warehouse selector
                     SizedBox(
-                      width: 160,
+                      width: 150,
                       child: DropdownButtonFormField<int?>(
                         value: selectedWarehouse,
                         isExpanded: true,
@@ -107,18 +106,26 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                         onChanged: (v) => ref.read(selectedWarehouseProvider.notifier).state = v,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Top Bar - Row 2: Actions
+                Row(
+                  children: [
                     ElevatedButton.icon(
                       onPressed: _showOpeningStockDialog,
                       icon: const Icon(Icons.inventory_2, size: 18),
                       label: const Text('Opening Stock'),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
+                    OutlinedButton.icon(
                       onPressed: _showAiDialog,
-                      icon: const Icon(Icons.smart_toy),
-                      tooltip: 'Ask AI',
-                      style: IconButton.styleFrom(backgroundColor: AppColors.primary.withOpacity(0.1)),
+                      icon: const Icon(Icons.smart_toy, size: 18),
+                      label: const Text('Ask AI'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
@@ -126,7 +133,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                       icon: const Icon(Icons.refresh),
                       tooltip: 'Refresh stock',
                     ),
-                    const SizedBox(width: 8),
+                    const Spacer(),
                     IconButton(
                       onPressed: () {},
                       icon: const Icon(Icons.notifications_outlined),
@@ -134,7 +141,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // KPI Row
                 Row(
@@ -183,18 +190,21 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                 const SizedBox(height: 16),
 
                 // Status Filter Chips
-                Row(
-                  children: [
-                    _StatusChip(label: 'All', selected: statusFilter == null, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = null),
-                    const SizedBox(width: 8),
-                    _StatusChip(label: 'In Stock', selected: statusFilter == StockStatus.normal, color: AppColors.success, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.normal),
-                    const SizedBox(width: 8),
-                    _StatusChip(label: 'Low Stock', selected: statusFilter == StockStatus.low, color: AppColors.warning, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.low),
-                    const SizedBox(width: 8),
-                    _StatusChip(label: 'Out of Stock', selected: statusFilter == StockStatus.outOfStock, color: AppColors.error, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.outOfStock),
-                    const SizedBox(width: 8),
-                    _StatusChip(label: 'Overstock', selected: statusFilter == StockStatus.overstock, color: AppColors.info, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.overstock),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _StatusChip(label: 'All', selected: statusFilter == null, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = null),
+                      const SizedBox(width: 8),
+                      _StatusChip(label: 'In Stock', selected: statusFilter == StockStatus.normal, color: AppColors.success, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.normal),
+                      const SizedBox(width: 8),
+                      _StatusChip(label: 'Low Stock', selected: statusFilter == StockStatus.low, color: AppColors.warning, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.low),
+                      const SizedBox(width: 8),
+                      _StatusChip(label: 'Out of Stock', selected: statusFilter == StockStatus.outOfStock, color: AppColors.error, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.outOfStock),
+                      const SizedBox(width: 8),
+                      _StatusChip(label: 'Overstock', selected: statusFilter == StockStatus.overstock, color: AppColors.info, onTap: () => ref.read(inventoryStatusFilterProvider.notifier).state = StockStatus.overstock),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
