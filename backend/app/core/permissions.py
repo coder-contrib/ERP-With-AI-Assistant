@@ -19,6 +19,7 @@ ROLE_PERMISSIONS = {
         "suppliers:read", "suppliers:write", "suppliers:delete",
         "payments:read", "payments:write",
         "expenses:read", "expenses:write",
+        "accounting:read", "accounting:write",
         "reports:read", "reports:export",
         "users:read", "users:write", "users:delete",
         "settings:read", "settings:write",
@@ -42,6 +43,7 @@ ROLE_PERMISSIONS = {
         "suppliers:read",
         "payments:read", "payments:write",
         "expenses:read", "expenses:write",
+        "accounting:read", "accounting:write",
         "reports:read", "reports:export",
     ],
     Role.WAREHOUSE_EMPLOYEE: [
