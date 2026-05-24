@@ -10,6 +10,7 @@ import '../../features/suppliers/presentation/suppliers_page.dart';
 import '../../features/sales/presentation/sales_page.dart';
 import '../../features/purchases/presentation/purchases_page.dart';
 import '../../features/inventory/presentation/inventory_page.dart';
+import '../../features/expenses/presentation/expenses_page.dart';
 import '../../features/opening_balances/presentation/opening_balances_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
@@ -41,6 +42,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/sales', builder: (_, __) => const SalesPage()),
           GoRoute(path: '/purchases', builder: (_, __) => const PurchasesPage()),
           GoRoute(path: '/inventory', builder: (_, __) => const InventoryPage()),
+          GoRoute(path: '/expenses', builder: (_, __) => const ExpensesPage()),
           GoRoute(path: '/opening-balances', builder: (_, __) => const OpeningBalancesPage()),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsPage()),
           GoRoute(path: '/notifications', builder: (_, __) => const NotificationsPage()),
