@@ -3,10 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
+import '../data/products_repository.dart';
 import 'products_provider.dart';
+import 'product_form_dialog.dart';
 
 class ProductsPage extends ConsumerWidget {
   const ProductsPage({super.key});
+
+  void _showAddDialog(BuildContext context) {
+    showDialog(context: context, builder: (_) => const ProductFormDialog());
+  }
+
+  void _showEditDialog(BuildContext context, ProductModel product) {
+    showDialog(context: context, builder: (_) => ProductFormDialog(product: product));
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +32,11 @@ class ProductsPage extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Products', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
-              ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: const Text('Add Product')),
+              ElevatedButton.icon(
+                onPressed: () => _showAddDialog(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Product'),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -56,10 +70,21 @@ class ProductsPage extends ConsumerWidget {
                       return ListTile(
                         title: Text(p.productName, style: const TextStyle(fontWeight: FontWeight.w500)),
                         subtitle: Text('${p.baseUnit} | Cost: \$${p.purchaseCost} | Price: \$${p.sellingPrice}'),
-                        trailing: Chip(
-                          label: Text(p.activeStatus ? 'Active' : 'Inactive', style: const TextStyle(fontSize: 12)),
-                          backgroundColor: p.activeStatus ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1),
-                          labelStyle: TextStyle(color: p.activeStatus ? AppColors.success : AppColors.error),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Chip(
+                              label: Text(p.activeStatus ? 'Active' : 'Inactive', style: const TextStyle(fontSize: 12)),
+                              backgroundColor: p.activeStatus ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1),
+                              labelStyle: TextStyle(color: p.activeStatus ? AppColors.success : AppColors.error),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => _showEditDialog(context, p),
+                              tooltip: 'Edit',
+                            ),
+                          ],
                         ),
                       );
                     },
