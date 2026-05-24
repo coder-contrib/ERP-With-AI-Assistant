@@ -13,6 +13,7 @@ class SupplierModel {
   final String? address;
   final String currentBalance;
   final int paymentTerms;
+  final String? lastPaymentDate;
   final String? notes;
 
   SupplierModel({
@@ -22,6 +23,7 @@ class SupplierModel {
     this.address,
     required this.currentBalance,
     required this.paymentTerms,
+    this.lastPaymentDate,
     this.notes,
   });
 
@@ -33,6 +35,7 @@ class SupplierModel {
       address: json['address'],
       currentBalance: json['current_balance']?.toString() ?? '0',
       paymentTerms: json['payment_terms'] ?? 0,
+      lastPaymentDate: json['last_payment_date'],
       notes: json['notes'],
     );
   }
@@ -55,5 +58,9 @@ class SuppliersRepository {
   Future<SupplierModel> update(int id, Map<String, dynamic> data) async {
     final response = await _dio.put('/suppliers/$id', data: data);
     return SupplierModel.fromJson(response.data);
+  }
+
+  Future<void> delete(int id) async {
+    await _dio.delete('/suppliers/$id');
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_theme.dart';
 import '../data/suppliers_repository.dart';
 import 'suppliers_provider.dart';
 
@@ -68,7 +69,7 @@ class _SupplierFormDialogState extends ConsumerState<SupplierFormDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
         );
       }
     } finally {
@@ -78,60 +79,181 @@ class _SupplierFormDialogState extends ConsumerState<SupplierFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(isEditing ? 'Edit Supplier' : 'Add Supplier'),
-      content: SizedBox(
-        width: 450,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Supplier Name *'),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: const InputDecoration(labelText: 'Phone Number'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _addressController,
-                  decoration: const InputDecoration(labelText: 'Address'),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _paymentTermsController,
-                  decoration: const InputDecoration(labelText: 'Payment Terms (days)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _notesController,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                  maxLines: 2,
-                ),
-              ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 550,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Icon(isEditing ? Icons.edit : Icons.local_shipping, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Text(
+                    isEditing ? 'Edit Supplier' : 'Add New Supplier',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+                ],
+              ),
             ),
-          ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _sectionHeader('Supplier Details', Icons.business_outlined),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Supplier Name *',
+                          hintText: 'Enter supplier/company name',
+                          prefixIcon: Icon(Icons.store_outlined),
+                        ),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Supplier name is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _phoneController,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          hintText: '+964 XXX XXX XXXX',
+                          prefixIcon: Icon(Icons.phone_outlined),
+                        ),
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: const InputDecoration(
+                          labelText: 'Address',
+                          hintText: 'Street, City, Region',
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 24),
+                      _sectionHeader('Payment Terms', Icons.payments_outlined),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _paymentTermsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Terms',
+                          hintText: '0',
+                          prefixIcon: Icon(Icons.calendar_today_outlined),
+                          suffixText: 'days',
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                      if (isEditing) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSurface : AppColors.background,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.account_balance, size: 18, color: AppColors.info),
+                                  const SizedBox(width: 8),
+                                  Text('Current Balance: ', style: TextStyle(color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
+                                  Text(
+                                    '${widget.supplier!.currentBalance} IQD',
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              if (widget.supplier!.lastPaymentDate != null) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.schedule, size: 18, color: AppColors.success),
+                                    const SizedBox(width: 8),
+                                    Text('Last Payment: ', style: TextStyle(color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
+                                    Text(
+                                      widget.supplier!.lastPaymentDate!.split('T').first,
+                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      _sectionHeader('Additional Information', Icons.notes_outlined),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Notes',
+                          hintText: 'Any additional notes about this supplier...',
+                          prefixIcon: Icon(Icons.note_outlined),
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 3,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _submit,
+                    icon: _isLoading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Icon(isEditing ? Icons.save : Icons.local_shipping),
+                    label: Text(isEditing ? 'Update Supplier' : 'Create Supplier'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submit,
-          child: _isLoading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(isEditing ? 'Update' : 'Create'),
-        ),
+    );
+  }
+
+  Widget _sectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.primary),
+        const SizedBox(width: 8),
+        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
       ],
     );
   }

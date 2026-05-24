@@ -14,8 +14,20 @@ class CustomerModel {
   final String currentBalance;
   final String creditLimit;
   final int paymentTerms;
+  final String? notes;
+  final String? createdDate;
 
-  CustomerModel({required this.customerId, required this.customerName, this.phoneNumber, this.address, required this.currentBalance, required this.creditLimit, required this.paymentTerms});
+  CustomerModel({
+    required this.customerId,
+    required this.customerName,
+    this.phoneNumber,
+    this.address,
+    required this.currentBalance,
+    required this.creditLimit,
+    required this.paymentTerms,
+    this.notes,
+    this.createdDate,
+  });
 
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
     return CustomerModel(
@@ -26,6 +38,8 @@ class CustomerModel {
       currentBalance: json['current_balance']?.toString() ?? '0',
       creditLimit: json['credit_limit']?.toString() ?? '0',
       paymentTerms: json['payment_terms'] ?? 0,
+      notes: json['notes'],
+      createdDate: json['created_date'],
     );
   }
 }
@@ -47,5 +61,9 @@ class CustomersRepository {
   Future<CustomerModel> update(int id, Map<String, dynamic> data) async {
     final response = await _dio.put('/customers/$id', data: data);
     return CustomerModel.fromJson(response.data);
+  }
+
+  Future<void> delete(int id) async {
+    await _dio.delete('/customers/$id');
   }
 }
