@@ -7,7 +7,7 @@ from app.models.suppliers import Supplier
 from app.models.sales import SalesInvoice, SalesInvoiceItem, SalesReturn, SalesReturnItem
 from app.models.purchases import PurchaseInvoice, PurchaseInvoiceItem, PurchaseReturn, PurchaseReturnItem
 from app.models.payments import CustomerPayment, SupplierPayment, CashTransaction
-from app.models.expenses import Expense
+from app.models.expenses import Expense, ExpenseCategory
 from app.models.waste import Waste
 from app.models.transfers import WarehouseTransfer
 from app.models.accounting import Account, LedgerEntry, DailyFinancialSummary
