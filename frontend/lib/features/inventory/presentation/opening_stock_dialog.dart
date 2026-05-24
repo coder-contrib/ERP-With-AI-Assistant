@@ -4,7 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../products/data/products_repository.dart';
 import '../../products/presentation/products_provider.dart';
 import '../data/inventory_repository.dart';
-import '../presentation/inventory_provider.dart';
+import 'inventory_provider.dart';
 
 class OpeningStockDialog extends ConsumerStatefulWidget {
   const OpeningStockDialog({super.key});
@@ -57,7 +57,7 @@ class _OpeningStockDialogState extends ConsumerState<OpeningStockDialog> {
           notes: line.notesController.text.trim().isEmpty ? null : line.notesController.text.trim(),
         );
       }
-      ref.invalidate(inventoryStockProvider);
+      ref.invalidate(inventoryDataProvider);
       if (mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -306,6 +306,7 @@ class _OpeningStockDialogState extends ConsumerState<OpeningStockDialog> {
                     hintText: '0',
                   ),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Required';
                     final num = double.tryParse(v.trim());
@@ -340,6 +341,7 @@ class _OpeningStockDialogState extends ConsumerState<OpeningStockDialog> {
                     suffixText: '/unit',
                   ),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Required';
                     if (double.tryParse(v.trim()) == null) return 'Invalid';
