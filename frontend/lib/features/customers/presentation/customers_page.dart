@@ -3,10 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
+import '../data/customers_repository.dart';
 import 'customers_provider.dart';
+import 'customer_form_dialog.dart';
 
 class CustomersPage extends ConsumerWidget {
   const CustomersPage({super.key});
+
+  void _showAddDialog(BuildContext context) {
+    showDialog(context: context, builder: (_) => const CustomerFormDialog());
+  }
+
+  void _showEditDialog(BuildContext context, CustomerModel customer) {
+    showDialog(context: context, builder: (_) => CustomerFormDialog(customer: customer));
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +32,11 @@ class CustomersPage extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Customers', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
-              ElevatedButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: const Text('Add Customer')),
+              ElevatedButton.icon(
+                onPressed: () => _showAddDialog(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Customer'),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -52,10 +66,21 @@ class CustomersPage extends ConsumerWidget {
                       return ListTile(
                         title: Text(c.customerName, style: const TextStyle(fontWeight: FontWeight.w500)),
                         subtitle: Text(c.phoneNumber ?? 'No phone'),
-                        trailing: Text('\$${c.currentBalance}', style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: double.parse(c.currentBalance) > 0 ? AppColors.warning : AppColors.success,
-                        )),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('\$${c.currentBalance}', style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: double.tryParse(c.currentBalance) != null && double.parse(c.currentBalance) > 0 ? AppColors.warning : AppColors.success,
+                            )),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => _showEditDialog(context, c),
+                              tooltip: 'Edit',
+                            ),
+                          ],
+                        ),
                       );
                     },
                   );
