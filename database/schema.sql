@@ -520,17 +520,28 @@ WHERE s.current_balance > 0
     OR (CURRENT_DATE - s.last_payment_date::date) > s.payment_terms
   );
 
--- 20. Expenses Table
+-- 20. Expense Categories Table (Dynamic, admin-managed)
+CREATE TABLE expense_categories (
+    category_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT
+);
+
+-- 21. Expenses Table
 CREATE TABLE expenses (
     expense_id SERIAL PRIMARY KEY,
     expense_category VARCHAR(100) NOT NULL,
     expense_name VARCHAR(200) NOT NULL,
     amount DECIMAL(14, 2) NOT NULL,
+    payment_method VARCHAR(30) DEFAULT 'cash',
+    paid_by VARCHAR(100),
+    receipt_number VARCHAR(50),
     expense_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT
+    notes TEXT,
+    created_by INTEGER
 );
 
--- 21. Waste Table
+-- 22. Waste Table
 CREATE TABLE waste (
     waste_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id),
@@ -541,7 +552,7 @@ CREATE TABLE waste (
     notes TEXT
 );
 
--- 22. Warehouse Transfers Table
+-- 23. Warehouse Transfers Table
 CREATE TABLE warehouse_transfers (
     transfer_id SERIAL PRIMARY KEY,
     from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(warehouse_id),
@@ -558,7 +569,7 @@ CREATE TABLE warehouse_transfers (
 -- Views: v_sales_profit, v_profit_and_loss, v_account_balances
 -- ============================================================
 
--- 23. Chart of Accounts Table
+-- 24. Chart of Accounts Table
 CREATE TABLE accounts (
     account_id SERIAL PRIMARY KEY,
     account_code VARCHAR(20) NOT NULL UNIQUE,
@@ -572,7 +583,7 @@ CREATE TABLE accounts (
     notes TEXT
 );
 
--- 24. Ledger Entries Table (Double-Entry Audit Trail)
+-- 25. Ledger Entries Table (Double-Entry Audit Trail)
 CREATE TABLE ledger_entries (
     entry_id SERIAL PRIMARY KEY,
     entry_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -589,9 +600,7 @@ CREATE TABLE ledger_entries (
     )
 );
 
--- 25. Daily Financial Summary (Precomputed, replaces slow P&L view)
--- One row per day. Updated by fn_refresh_daily_financial_summary().
--- Query this for fast P&L reporting over any date range.
+-- 26. Daily Financial Summary (Precomputed, replaces slow P&L view)
 CREATE TABLE daily_financial_summary (
     summary_id SERIAL PRIMARY KEY,
     summary_date DATE NOT NULL UNIQUE,
@@ -607,7 +616,6 @@ CREATE TABLE daily_financial_summary (
 
 -- ============================================================
 -- Function: Refresh financial summary for a specific date
--- Call after end-of-day, or on-demand for reports.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_refresh_daily_financial_summary(p_date DATE DEFAULT CURRENT_DATE)
 RETURNS VOID AS $$
@@ -665,7 +673,6 @@ $$ LANGUAGE plpgsql;
 
 -- ============================================================
 -- Function: Refresh financial summary for a date range
--- Useful for backfilling or correcting historical data.
 -- ============================================================
 CREATE OR REPLACE FUNCTION fn_refresh_financial_summary_range(
     p_start_date DATE,
@@ -683,9 +690,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
--- View: Profit & Loss for any period (reads from precomputed table)
--- Usage: SELECT * FROM v_profit_and_loss WHERE summary_date BETWEEN '2024-01-01' AND '2024-01-31'
--- Or aggregate: SELECT SUM(revenue), SUM(cogs), SUM(net_profit) FROM daily_financial_summary WHERE ...
+-- View: Profit & Loss for any period
 -- ============================================================
 CREATE OR REPLACE VIEW v_profit_and_loss AS
 SELECT
@@ -721,7 +726,7 @@ LEFT JOIN ledger_entries le ON le.account_id = a.account_id
 GROUP BY a.account_id, a.account_code, a.account_name, a.account_type;
 
 -- ============================================================
--- View: Profit per sales invoice item (detail level)
+-- View: Profit per sales invoice item
 -- ============================================================
 CREATE OR REPLACE VIEW v_sales_profit AS
 SELECT
@@ -741,7 +746,7 @@ FROM sales_invoice_items sii
 JOIN sales_invoices si ON si.invoice_id = sii.invoice_id
 JOIN products p ON p.product_id = sii.product_id;
 
--- 26. Users Table
+-- 27. Users Table
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     full_name VARCHAR(200) NOT NULL,
@@ -752,7 +757,7 @@ CREATE TABLE users (
     last_login TIMESTAMP
 );
 
--- 27. Activity Logs Table
+-- 28. Activity Logs Table
 CREATE TABLE activity_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(user_id),
@@ -793,6 +798,9 @@ CREATE INDEX idx_supplier_payments_supplier ON supplier_payments(supplier_id);
 CREATE INDEX idx_cash_transactions_type ON cash_transactions(transaction_type);
 CREATE INDEX idx_cash_transactions_date ON cash_transactions(transaction_date);
 CREATE INDEX idx_cash_transactions_entity ON cash_transactions(entity_type, entity_id);
+CREATE INDEX idx_expenses_category ON expenses(expense_category);
+CREATE INDEX idx_expenses_date ON expenses(expense_date);
+CREATE INDEX idx_expenses_payment_method ON expenses(payment_method);
 CREATE INDEX idx_ledger_entries_account ON ledger_entries(account_id);
 CREATE INDEX idx_ledger_entries_date ON ledger_entries(entry_date);
 CREATE INDEX idx_ledger_entries_entity ON ledger_entries(entity_type, entity_id);
@@ -840,3 +848,19 @@ INSERT INTO accounts (account_code, account_name, account_type, is_system) VALUE
     ('6400', 'Transportation Expense', 'expense', FALSE),
     ('6500', 'Maintenance Expense', 'expense', FALSE),
     ('7000', 'Waste & Loss', 'expense', TRUE);
+
+-- ============================================================
+-- Sample Data: Default Expense Categories
+-- ============================================================
+
+INSERT INTO expense_categories (name, description) VALUES
+    ('Rent', 'Monthly rent payments'),
+    ('Salaries', 'Employee salaries and wages'),
+    ('Electricity', 'Electricity bills'),
+    ('Water', 'Water bills'),
+    ('Internet', 'Internet and telecom'),
+    ('Transport', 'Transportation costs'),
+    ('Maintenance', 'Repairs and maintenance'),
+    ('Marketing', 'Marketing and advertising'),
+    ('Packaging', 'Packaging materials'),
+    ('Miscellaneous', 'Other uncategorized expenses');
