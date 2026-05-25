@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../../products/data/products_repository.dart';
 import '../../products/presentation/products_provider.dart';
 import '../data/inventory_repository.dart';
@@ -57,7 +58,7 @@ class _OpeningStockDialogState extends ConsumerState<OpeningStockDialog> {
           notes: line.notesController.text.trim().isEmpty ? null : line.notesController.text.trim(),
         );
       }
-      ref.invalidate(inventoryDataProvider);
+      invalidateAfterInventoryChange(ref);
       if (mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
