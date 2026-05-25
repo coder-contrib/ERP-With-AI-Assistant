@@ -38,12 +38,12 @@ class SalesService:
     def create_invoice(self, data: SalesInvoiceCreate) -> SalesInvoice:
         with transaction(self.db):
             # --- VALIDATION ---
-            if data.invoice_type == "credit" and not data.customer_id:
-                raise ValidationError("Credit invoices require a customer")
+            if data.invoice_type in ("credit", "mixed") and not data.customer_id:
+                raise ValidationError("Credit and mixed invoices require a customer")
 
             total_amount = sum(item.total_price for item in data.items)
 
-            if data.invoice_type == "credit" and data.customer_id:
+            if data.invoice_type in ("credit", "mixed") and data.customer_id:
                 self.validator.validate_credit_limit(data.customer_id, total_amount)
 
             for item_data in data.items:
@@ -96,10 +96,10 @@ class SalesService:
                 total_amount=total_amount,
                 cogs=sum(item.sold_quantity * item.cost_at_sale for item in data.items),
                 cash_received=data.paid_amount,
-                is_credit=(data.invoice_type == "credit"),
+                is_credit=(data.invoice_type in ("credit", "mixed")),
             )
 
-            if data.invoice_type == "credit" and data.customer_id:
+            if data.invoice_type in ("credit", "mixed") and data.customer_id and remaining > 0:
                 customer = self.customer_repo.get_by_id(data.customer_id)
                 self.customer_repo.update_balance(customer, remaining)
 
