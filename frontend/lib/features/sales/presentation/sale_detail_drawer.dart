@@ -26,17 +26,30 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
   late TabController _tabController;
   String? _aiResponse;
   bool _aiLoading = false;
+  List<InvoicePaymentModel> _payments = [];
+  bool _paymentsLoading = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadPayments();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPayments() async {
+    setState(() => _paymentsLoading = true);
+    try {
+      final repo = ref.read(salesRepositoryProvider);
+      final payments = await repo.getInvoicePayments(widget.invoice.invoiceId);
+      if (mounted) setState(() => _payments = payments);
+    } catch (_) {}
+    if (mounted) setState(() => _paymentsLoading = false);
   }
 
   @override
@@ -140,8 +153,85 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
           _infoRow('Warehouse', 'Warehouse ${inv.warehouseId}', isDark),
           if (inv.invoiceDate != null) _infoRow('Date', _formatDate(inv.invoiceDate!), isDark),
           _infoRow('Invoice ID', '#${inv.invoiceId}', isDark),
+          const SizedBox(height: 16),
+          _buildPaymentHistory(isDark),
         ],
       ),
+    );
+  }
+
+  Widget _buildPaymentHistory(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _sectionTitle('Payment History'),
+            const Spacer(),
+            if (_paymentsLoading)
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_payments.isEmpty && !_paymentsLoading)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+            ),
+            child: Text(
+              'No payments recorded yet',
+              style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ..._payments.map((p) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.success.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.success.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${p.amount.toStringAsFixed(2)} EGP',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    if (p.paymentDate != null)
+                      Text(
+                        _formatDate(p.paymentDate!),
+                        style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                      ),
+                  ],
+                ),
+              ),
+              if (p.notes != null && p.notes!.isNotEmpty)
+                Tooltip(
+                  message: p.notes!,
+                  child: Icon(Icons.note, size: 14, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                ),
+            ],
+          ),
+        )),
+      ],
     );
   }
 
@@ -300,6 +390,19 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
         ['Remaining', inv.remaining.toStringAsFixed(2)],
       ],
     );
+
+    if (_payments.isNotEmpty) {
+      tableHtml += buildTableHtml(
+        sectionTitle: 'Payment History',
+        headers: ['#', 'Amount (EGP)', 'Date', 'Notes'],
+        rows: _payments.asMap().entries.map((entry) {
+          final i = entry.key + 1;
+          final p = entry.value;
+          final pDate = p.paymentDate != null ? _formatDate(p.paymentDate!) : 'N/A';
+          return ['$i', p.amount.toStringAsFixed(2), pDate, p.notes ?? '—'];
+        }).toList(),
+      );
+    }
 
     tableHtml += '''
 <div style="margin-top: 20px; padding: 12px; border: 2px solid ${inv.isPaid ? '#1e8e3e' : '#d93025'}; border-radius: 8px; text-align: center;">
