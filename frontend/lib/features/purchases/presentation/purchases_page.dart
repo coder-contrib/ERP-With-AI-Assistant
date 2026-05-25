@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../data/purchases_repository.dart';
 import '../../suppliers/data/suppliers_repository.dart';
 import 'purchases_provider.dart';
@@ -53,7 +54,7 @@ class _PurchasesPageState extends ConsumerState<PurchasesPage> {
                     context: context,
                     builder: (_) => const CreatePurchaseDialog(),
                   );
-                  if (result == true) ref.invalidate(purchasesProvider);
+                  if (result == true) invalidateAfterPurchase(ref);
                 },
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('New Purchase'),
@@ -208,7 +209,7 @@ class _PurchasesPageState extends ConsumerState<PurchasesPage> {
                   'related_invoice_id': invoice.purchaseInvoiceId,
                   'payment_amount': amount,
                 });
-                ref.invalidate(purchasesProvider);
+                invalidateAfterPurchase(ref);
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 if (ctx.mounted) {

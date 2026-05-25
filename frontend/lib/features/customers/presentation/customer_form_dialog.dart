@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../data/customers_repository.dart';
 import 'customers_provider.dart';
 
@@ -68,7 +69,7 @@ class _CustomerFormDialogState extends ConsumerState<CustomerFormDialog> {
       } else {
         await repo.create(data);
       }
-      ref.invalidate(customersProvider);
+      invalidateAfterCustomerChange(ref);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
