@@ -18,7 +18,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -39,11 +39,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final profitAsync = ref.watch(reportsMonthlyProfitProvider);
-    final cashFlowAsync = ref.watch(reportsCashFlowProvider);
-    final customersAsync = ref.watch(reportsCustomerBalancesProvider);
-    final suppliersAsync = ref.watch(reportsSupplierBalancesProvider);
-
     return Scaffold(
       body: Column(
         children: [
@@ -59,27 +54,27 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _buildKPIRow(profitAsync, cashFlowAsync, customersAsync, suppliersAsync),
-          ),
           const SizedBox(height: 20),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
             decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
             child: TabBar(
               controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               indicator: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
               labelColor: Colors.white,
               unselectedLabelColor: AppColors.primary,
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
               tabs: const [
-                Tab(text: 'Sales', icon: Icon(Icons.receipt_long, size: 16)),
-                Tab(text: 'Financial', icon: Icon(Icons.account_balance, size: 16)),
+                Tab(text: 'Daily Sales', icon: Icon(Icons.receipt_long, size: 16)),
+                Tab(text: 'Monthly Profit', icon: Icon(Icons.trending_up, size: 16)),
+                Tab(text: 'Top Products', icon: Icon(Icons.star, size: 16)),
                 Tab(text: 'Inventory', icon: Icon(Icons.warehouse, size: 16)),
                 Tab(text: 'Customers', icon: Icon(Icons.people, size: 16)),
+                Tab(text: 'Suppliers', icon: Icon(Icons.local_shipping, size: 16)),
+                Tab(text: 'Cash Flow', icon: Icon(Icons.account_balance_wallet, size: 16)),
               ],
             ),
           ),
@@ -88,10 +83,13 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
             child: TabBarView(
               controller: _tabController,
               children: const [
-                _SalesReportTab(),
-                _FinancialReportTab(),
-                _InventoryReportTab(),
-                _CustomerReportTab(),
+                _DailySalesTab(),
+                _MonthlyProfitTab(),
+                _TopProductsTab(),
+                _InventoryTab(),
+                _CustomerBalancesTab(),
+                _SupplierBalancesTab(),
+                _CashFlowTab(),
               ],
             ),
           ),
@@ -99,71 +97,15 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
       ),
     );
   }
-
-  Widget _buildKPIRow(
-    AsyncValue<Map<String, dynamic>> profitAsync,
-    AsyncValue<Map<String, dynamic>> cashFlowAsync,
-    AsyncValue<Map<String, dynamic>> customersAsync,
-    AsyncValue<Map<String, dynamic>> suppliersAsync,
-  ) {
-    return Row(
-      children: [
-        Expanded(child: profitAsync.when(
-          data: (data) {
-            final months = data['data'] as List? ?? [];
-            final revenue = months.isNotEmpty ? _parseNum(months.last['revenue']) : 0.0;
-            return KPICard(title: 'Monthly Revenue', value: '${_formatNum(revenue)} IQD', icon: Icons.trending_up, color: AppColors.success);
-          },
-          loading: () => const KPICard(title: 'Monthly Revenue', value: '...', icon: Icons.trending_up, color: AppColors.success),
-          error: (_, __) => const KPICard(title: 'Monthly Revenue', value: 'N/A', icon: Icons.trending_up, color: AppColors.success),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: cashFlowAsync.when(
-          data: (data) {
-            final netFlow = _parseNum(data['data']?['net_flow']);
-            return KPICard(title: 'Cash Balance', value: '${_formatNum(netFlow)} IQD', icon: Icons.account_balance_wallet, color: AppColors.info);
-          },
-          loading: () => const KPICard(title: 'Cash Balance', value: '...', icon: Icons.account_balance_wallet, color: AppColors.info),
-          error: (_, __) => const KPICard(title: 'Cash Balance', value: 'N/A', icon: Icons.account_balance_wallet, color: AppColors.info),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: customersAsync.when(
-          data: (data) => KPICard(title: 'Receivables', value: '${_formatNum(_parseNum(data['total_receivable']))} IQD', icon: Icons.people, color: AppColors.warning),
-          loading: () => const KPICard(title: 'Receivables', value: '...', icon: Icons.people, color: AppColors.warning),
-          error: (_, __) => const KPICard(title: 'Receivables', value: 'N/A', icon: Icons.people, color: AppColors.warning),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: suppliersAsync.when(
-          data: (data) => KPICard(title: 'Payables', value: '${_formatNum(_parseNum(data['total_payable']))} IQD', icon: Icons.local_shipping, color: AppColors.error),
-          loading: () => const KPICard(title: 'Payables', value: '...', icon: Icons.local_shipping, color: AppColors.error),
-          error: (_, __) => const KPICard(title: 'Payables', value: 'N/A', icon: Icons.local_shipping, color: AppColors.error),
-        )),
-      ],
-    );
-  }
-
-  double _parseNum(dynamic v) {
-    if (v == null) return 0;
-    if (v is String) return double.tryParse(v) ?? 0;
-    return v.toDouble();
-  }
-
-  String _formatNum(double n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}K';
-    return n.toStringAsFixed(0);
-  }
 }
 
-// ─── Sales Report Tab ────────────────────────────────────────────────────────
-class _SalesReportTab extends ConsumerWidget {
-  const _SalesReportTab();
+// ─── Daily Sales Tab ─────────────────────────────────────────────────────────
+class _DailySalesTab extends ConsumerWidget {
+  const _DailySalesTab();
 
-  void _print(Map<String, dynamic> salesData, Map<String, dynamic> topData) {
+  void _print(Map<String, dynamic> salesData) {
     final days = (salesData['data'] as List?) ?? [];
-    final products = (topData['data'] as List?) ?? [];
-
-    var tableHtml = buildTableHtml(
+    final tableHtml = buildTableHtml(
       sectionTitle: 'Daily Sales (Last 30 Days)',
       headers: ['Date', 'Invoices', 'Total Sales', 'Cash Collected', 'Credit Sales'],
       rows: days.map<List<String>>((d) => [
@@ -171,23 +113,12 @@ class _SalesReportTab extends ConsumerWidget {
         '${_fmtAmount(d['total_sales'])} IQD', '${_fmtAmount(d['cash_collected'])} IQD', '${_fmtAmount(d['credit_sales'])} IQD',
       ]).toList(),
     );
-
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Top Selling Products',
-      headers: ['#', 'Product', 'Qty Sold', 'Revenue'],
-      rows: products.asMap().entries.map<List<String>>((e) => [
-        '${e.key + 1}', e.value['product_name'] ?? '',
-        '${e.value['total_quantity']}', '${_fmtAmount(e.value['total_revenue'])} IQD',
-      ]).toList(),
-    );
-
-    printReportHtml(title: 'Sales Report', tableHtml: tableHtml);
+    printReportHtml(title: 'Daily Sales Report', tableHtml: tableHtml);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(reportsDailySalesProvider);
-    final topAsync = ref.watch(reportsTopProductsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
@@ -195,14 +126,11 @@ class _SalesReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Sales Report', () {
+          _reportHeader('Daily Sales Report', () {
             final sales = salesAsync.valueOrNull ?? {};
-            final top = topAsync.valueOrNull ?? {};
-            _print(sales, top);
+            _print(sales);
           }),
           const SizedBox(height: 16),
-          _sectionTitle('Daily Sales (Last 30 Days)'),
-          const SizedBox(height: 12),
           salesAsync.when(
             data: (data) {
               final days = (data['data'] as List?) ?? [];
@@ -228,48 +156,19 @@ class _SalesReportTab extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
           ),
-          const SizedBox(height: 24),
-          _sectionTitle('Top Selling Products'),
-          const SizedBox(height: 12),
-          topAsync.when(
-            data: (data) {
-              final products = (data['data'] as List?) ?? [];
-              if (products.isEmpty) return const Text('No product data');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Qty Sold', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                ],
-                rows: products.asMap().entries.map<DataRow>((e) => DataRow(cells: [
-                  DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                ])).toList(),
-              ));
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
         ],
       ),
     );
   }
 }
 
-// ─── Financial Report Tab ────────────────────────────────────────────────────
-class _FinancialReportTab extends ConsumerWidget {
-  const _FinancialReportTab();
+// ─── Monthly Profit Tab ──────────────────────────────────────────────────────
+class _MonthlyProfitTab extends ConsumerWidget {
+  const _MonthlyProfitTab();
 
-  void _print(Map<String, dynamic> profitData, Map<String, dynamic> cashData) {
+  void _print(Map<String, dynamic> profitData) {
     final months = (profitData['data'] as List?) ?? [];
-    final flowData = cashData['data'] as Map<String, dynamic>? ?? {};
-    final days = (flowData['days'] as List?) ?? [];
-
-    var tableHtml = buildTableHtml(
+    final tableHtml = buildTableHtml(
       sectionTitle: 'Monthly Profit & Loss',
       headers: ['Month', 'Revenue', 'COGS', 'Gross Profit', 'Expenses', 'Net Profit', 'Margin'],
       rows: months.map<List<String>>((m) => [
@@ -278,25 +177,12 @@ class _FinancialReportTab extends ConsumerWidget {
         '${_fmtAmount(m['net_profit'])} IQD', '${m['gross_margin']}%',
       ]).toList(),
     );
-
-    tableHtml += '<br><p style="font-size:14px;margin:10px 0;"><strong>Summary:</strong> Total In: ${_fmtAmount(flowData['total_in'])} IQD | Total Out: ${_fmtAmount(flowData['total_out'])} IQD | Net: ${_fmtAmount(flowData['net_flow'])} IQD</p>';
-
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Cash Flow (Last 30 Days)',
-      headers: ['Date', 'Cash In', 'Cash Out', 'Net'],
-      rows: days.map<List<String>>((d) => [
-        d['date'] ?? '', '${_fmtAmount(d['cash_in'])} IQD',
-        '${_fmtAmount(d['cash_out'])} IQD', '${_fmtAmount(d['net'])} IQD',
-      ]).toList(),
-    );
-
-    printReportHtml(title: 'Financial Report', tableHtml: tableHtml);
+    printReportHtml(title: 'Monthly Profit Report', tableHtml: tableHtml);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profitAsync = ref.watch(reportsMonthlyProfitProvider);
-    final cashFlowAsync = ref.watch(reportsCashFlowProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
@@ -304,14 +190,11 @@ class _FinancialReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Financial Report', () {
+          _reportHeader('Monthly Profit & Loss', () {
             final profit = profitAsync.valueOrNull ?? {};
-            final cash = cashFlowAsync.valueOrNull ?? {};
-            _print(profit, cash);
+            _print(profit);
           }),
           const SizedBox(height: 16),
-          _sectionTitle('Monthly P&L'),
-          const SizedBox(height: 12),
           profitAsync.when(
             data: (data) {
               final months = (data['data'] as List?) ?? [];
@@ -341,42 +224,63 @@ class _FinancialReportTab extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
           ),
-          const SizedBox(height: 24),
-          _sectionTitle('Cash Flow (Last 30 Days)'),
-          const SizedBox(height: 12),
-          cashFlowAsync.when(
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Top Products Tab ────────────────────────────────────────────────────────
+class _TopProductsTab extends ConsumerWidget {
+  const _TopProductsTab();
+
+  void _print(Map<String, dynamic> topData) {
+    final products = (topData['data'] as List?) ?? [];
+    final tableHtml = buildTableHtml(
+      sectionTitle: 'Top Selling Products',
+      headers: ['#', 'Product', 'Qty Sold', 'Revenue'],
+      rows: products.asMap().entries.map<List<String>>((e) => [
+        '${e.key + 1}', e.value['product_name'] ?? '',
+        '${e.value['total_quantity']}', '${_fmtAmount(e.value['total_revenue'])} IQD',
+      ]).toList(),
+    );
+    printReportHtml(title: 'Top Products Report', tableHtml: tableHtml);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final topAsync = ref.watch(reportsTopProductsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _reportHeader('Top Selling Products', () {
+            final top = topAsync.valueOrNull ?? {};
+            _print(top);
+          }),
+          const SizedBox(height: 16),
+          topAsync.when(
             data: (data) {
-              final flowData = data['data'] as Map<String, dynamic>? ?? {};
-              final days = (flowData['days'] as List?) ?? [];
-              if (days.isEmpty) return const Text('No cash flow data');
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    _statBadge('Total In', flowData['total_in'], AppColors.success),
-                    const SizedBox(width: 12),
-                    _statBadge('Total Out', flowData['total_out'], AppColors.error),
-                    const SizedBox(width: 12),
-                    _statBadge('Net Flow', flowData['net_flow'], AppColors.info),
-                  ]),
-                  const SizedBox(height: 16),
-                  _buildContainer(isDark, child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                    columns: const [
-                      DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                      DataColumn(label: Text('Cash In', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Cash Out', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Net', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    ],
-                    rows: days.map<DataRow>((d) => DataRow(cells: [
-                      DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text(_fmtAmount(d['cash_in']), style: const TextStyle(fontSize: 13, color: AppColors.success))),
-                      DataCell(Text(_fmtAmount(d['cash_out']), style: const TextStyle(fontSize: 13, color: AppColors.error))),
-                      DataCell(Text(_fmtAmount(d['net']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(d['net'])))),
-                    ])).toList(),
-                  )),
+              final products = (data['data'] as List?) ?? [];
+              if (products.isEmpty) return const Text('No product data');
+              return _buildContainer(isDark, child: DataTable(
+                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
+                columns: const [
+                  DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
+                  DataColumn(label: Text('Qty Sold', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                  DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
                 ],
-              );
+                rows: products.asMap().entries.map<DataRow>((e) => DataRow(cells: [
+                  DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
+                  DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                  DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
+                  DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                ])).toList(),
+              ));
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -387,9 +291,9 @@ class _FinancialReportTab extends ConsumerWidget {
   }
 }
 
-// ─── Inventory Report Tab ────────────────────────────────────────────────────
-class _InventoryReportTab extends ConsumerWidget {
-  const _InventoryReportTab();
+// ─── Inventory Tab ───────────────────────────────────────────────────────────
+class _InventoryTab extends ConsumerWidget {
+  const _InventoryTab();
 
   void _print(Map<String, dynamic> data) {
     final valuation = data['data'] as Map<String, dynamic>? ?? {};
@@ -404,7 +308,6 @@ class _InventoryReportTab extends ConsumerWidget {
         '${w['total_quantity']}', '${_fmtAmount(w['total_value'])} IQD',
       ]).toList(),
     );
-
     printReportHtml(title: 'Inventory Report', tableHtml: tableHtml);
   }
 
@@ -418,13 +321,11 @@ class _InventoryReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Inventory Report', () {
+          _reportHeader('Inventory Valuation', () {
             final data = inventoryAsync.valueOrNull ?? {};
             _print(data);
           }),
           const SizedBox(height: 16),
-          _sectionTitle('Inventory Valuation'),
-          const SizedBox(height: 12),
           inventoryAsync.when(
             data: (data) {
               final valuation = data['data'] as Map<String, dynamic>? ?? {};
@@ -474,14 +375,12 @@ class _InventoryReportTab extends ConsumerWidget {
   }
 }
 
-// ─── Customer Report Tab ─────────────────────────────────────────────────────
-class _CustomerReportTab extends ConsumerWidget {
-  const _CustomerReportTab();
+// ─── Customer Balances Tab ───────────────────────────────────────────────────
+class _CustomerBalancesTab extends ConsumerWidget {
+  const _CustomerBalancesTab();
 
-  void _print(Map<String, dynamic> custData, Map<String, dynamic> suppData) {
+  void _print(Map<String, dynamic> custData) {
     final customers = (custData['data'] as List?) ?? [];
-    final suppliers = (suppData['data'] as List?) ?? [];
-
     var tableHtml = '<p style="font-size:14px;margin-bottom:10px;"><strong>Total Receivables: ${_fmtAmount(custData['total_receivable'])} IQD</strong></p>';
     tableHtml += buildTableHtml(
       sectionTitle: 'Customer Receivables',
@@ -491,8 +390,71 @@ class _CustomerReportTab extends ConsumerWidget {
         '${_fmtAmount(c['credit_limit'])} IQD', c['over_limit'] == true ? 'OVER LIMIT' : 'OK',
       ]).toList(),
     );
+    printReportHtml(title: 'Customer Balances Report', tableHtml: tableHtml);
+  }
 
-    tableHtml += '<br><p style="font-size:14px;margin-bottom:10px;"><strong>Total Payables: ${_fmtAmount(suppData['total_payable'])} IQD</strong></p>';
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final customersAsync = ref.watch(reportsCustomerBalancesProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _reportHeader('Customer Balances', () {
+            final cust = customersAsync.valueOrNull ?? {};
+            _print(cust);
+          }),
+          const SizedBox(height: 16),
+          customersAsync.when(
+            data: (data) {
+              final customers = (data['data'] as List?) ?? [];
+              if (customers.isEmpty) return const Text('No receivables');
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _statBadge('Total Receivables', data['total_receivable'], AppColors.warning),
+                  const SizedBox(height: 16),
+                  _buildContainer(isDark, child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
+                    columns: const [
+                      DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Credit Limit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
+                    ],
+                    rows: customers.map<DataRow>((c) => DataRow(cells: [
+                      DataCell(Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                      DataCell(Text('${_fmtAmount(c['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                      DataCell(Text('${_fmtAmount(c['credit_limit'])} IQD', style: const TextStyle(fontSize: 13))),
+                      DataCell(c['over_limit'] == true
+                        ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: const Text('Over Limit', style: TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)))
+                        : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: const Text('OK', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600)))),
+                    ])).toList(),
+                  )),
+                ],
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Text('Error: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Supplier Balances Tab ───────────────────────────────────────────────────
+class _SupplierBalancesTab extends ConsumerWidget {
+  const _SupplierBalancesTab();
+
+  void _print(Map<String, dynamic> suppData) {
+    final suppliers = (suppData['data'] as List?) ?? [];
+    var tableHtml = '<p style="font-size:14px;margin-bottom:10px;"><strong>Total Payables: ${_fmtAmount(suppData['total_payable'])} IQD</strong></p>';
     tableHtml += buildTableHtml(
       sectionTitle: 'Supplier Payables',
       headers: ['Supplier', 'Balance (IQD)', 'Payment Terms (days)'],
@@ -500,13 +462,11 @@ class _CustomerReportTab extends ConsumerWidget {
         s['supplier_name'] ?? '', '${_fmtAmount(s['current_balance'])} IQD', '${s['payment_terms']}',
       ]).toList(),
     );
-
-    printReportHtml(title: 'Customer & Supplier Report', tableHtml: tableHtml);
+    printReportHtml(title: 'Supplier Balances Report', tableHtml: tableHtml);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customersAsync = ref.watch(reportsCustomerBalancesProvider);
     final suppliersAsync = ref.watch(reportsSupplierBalancesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -515,61 +475,113 @@ class _CustomerReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Customer & Supplier Report', () {
-            final cust = customersAsync.valueOrNull ?? {};
+          _reportHeader('Supplier Balances', () {
             final supp = suppliersAsync.valueOrNull ?? {};
-            _print(cust, supp);
+            _print(supp);
           }),
           const SizedBox(height: 16),
-          _sectionTitle('Customer Receivables'),
-          const SizedBox(height: 12),
-          customersAsync.when(
-            data: (data) {
-              final customers = (data['data'] as List?) ?? [];
-              if (customers.isEmpty) return const Text('No receivables');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Credit Limit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                ],
-                rows: customers.map<DataRow>((c) => DataRow(cells: [
-                  DataCell(Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${_fmtAmount(c['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                  DataCell(Text('${_fmtAmount(c['credit_limit'])} IQD', style: const TextStyle(fontSize: 13))),
-                  DataCell(c['over_limit'] == true
-                    ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                        child: const Text('Over Limit', style: TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)))
-                    : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                        child: const Text('OK', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600)))),
-                ])).toList(),
-              ));
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-          const SizedBox(height: 24),
-          _sectionTitle('Supplier Payables'),
-          const SizedBox(height: 12),
           suppliersAsync.when(
             data: (data) {
               final suppliers = (data['data'] as List?) ?? [];
               if (suppliers.isEmpty) return const Text('No payables');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('Supplier', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Terms (days)', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _statBadge('Total Payables', data['total_payable'], AppColors.error),
+                  const SizedBox(height: 16),
+                  _buildContainer(isDark, child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
+                    columns: const [
+                      DataColumn(label: Text('Supplier', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Terms (days)', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    ],
+                    rows: suppliers.map<DataRow>((s) => DataRow(cells: [
+                      DataCell(Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                      DataCell(Text('${_fmtAmount(s['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                      DataCell(Text('${s['payment_terms']}', style: const TextStyle(fontSize: 13))),
+                    ])).toList(),
+                  )),
                 ],
-                rows: suppliers.map<DataRow>((s) => DataRow(cells: [
-                  DataCell(Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${_fmtAmount(s['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                  DataCell(Text('${s['payment_terms']}', style: const TextStyle(fontSize: 13))),
-                ])).toList(),
-              ));
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Text('Error: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Cash Flow Tab ───────────────────────────────────────────────────────────
+class _CashFlowTab extends ConsumerWidget {
+  const _CashFlowTab();
+
+  void _print(Map<String, dynamic> cashData) {
+    final flowData = cashData['data'] as Map<String, dynamic>? ?? {};
+    final days = (flowData['days'] as List?) ?? [];
+
+    var tableHtml = '<p style="font-size:14px;margin:10px 0;"><strong>Summary:</strong> Total In: ${_fmtAmount(flowData['total_in'])} IQD | Total Out: ${_fmtAmount(flowData['total_out'])} IQD | Net: ${_fmtAmount(flowData['net_flow'])} IQD</p>';
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Cash Flow (Last 30 Days)',
+      headers: ['Date', 'Cash In', 'Cash Out', 'Net'],
+      rows: days.map<List<String>>((d) => [
+        d['date'] ?? '', '${_fmtAmount(d['cash_in'])} IQD',
+        '${_fmtAmount(d['cash_out'])} IQD', '${_fmtAmount(d['net'])} IQD',
+      ]).toList(),
+    );
+    printReportHtml(title: 'Cash Flow Report', tableHtml: tableHtml);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cashFlowAsync = ref.watch(reportsCashFlowProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _reportHeader('Cash Flow Report', () {
+            final cash = cashFlowAsync.valueOrNull ?? {};
+            _print(cash);
+          }),
+          const SizedBox(height: 16),
+          cashFlowAsync.when(
+            data: (data) {
+              final flowData = data['data'] as Map<String, dynamic>? ?? {};
+              final days = (flowData['days'] as List?) ?? [];
+              if (days.isEmpty) return const Text('No cash flow data');
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    _statBadge('Total In', flowData['total_in'], AppColors.success),
+                    const SizedBox(width: 12),
+                    _statBadge('Total Out', flowData['total_out'], AppColors.error),
+                    const SizedBox(width: 12),
+                    _statBadge('Net Flow', flowData['net_flow'], AppColors.info),
+                  ]),
+                  const SizedBox(height: 16),
+                  _buildContainer(isDark, child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
+                    columns: const [
+                      DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Cash In', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Cash Out', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Net', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    ],
+                    rows: days.map<DataRow>((d) => DataRow(cells: [
+                      DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
+                      DataCell(Text(_fmtAmount(d['cash_in']), style: const TextStyle(fontSize: 13, color: AppColors.success))),
+                      DataCell(Text(_fmtAmount(d['cash_out']), style: const TextStyle(fontSize: 13, color: AppColors.error))),
+                      DataCell(Text(_fmtAmount(d['net']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(d['net'])))),
+                    ])).toList(),
+                  )),
+                ],
+              );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -608,14 +620,6 @@ Widget _reportHeader(String title, VoidCallback onPrint) {
       ],
     ),
   );
-}
-
-Widget _sectionTitle(String title) {
-  return Row(children: [
-    Container(width: 4, height: 20, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
-    const SizedBox(width: 10),
-    Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-  ]);
 }
 
 Widget _buildContainer(bool isDark, {required Widget child}) {
