@@ -26,6 +26,16 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     super.dispose();
   }
 
+  void _refreshAfterOperation() {
+    ref.invalidate(salesProvider);
+    if (_selectedInvoice != null) {
+      final repo = ref.read(salesRepositoryProvider);
+      repo.getById(_selectedInvoice!.invoiceId).then((updated) {
+        if (mounted) setState(() => _selectedInvoice = updated);
+      }).catchError((_) {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -65,13 +75,11 @@ class _SalesPageState extends ConsumerState<SalesPage> {
         ),
         if (_selectedInvoice != null)
           SaleDetailDrawer(
+            key: ValueKey(_selectedInvoice!.invoiceId),
             invoice: _selectedInvoice!,
             customerName: customerMap[_selectedInvoice!.customerId] ?? 'Walk-in',
             onClose: () => setState(() => _selectedInvoice = null),
-            onPaymentRecorded: () {
-              ref.invalidate(salesProvider);
-              setState(() => _selectedInvoice = null);
-            },
+            onPaymentRecorded: _refreshAfterOperation,
           ),
       ],
     );
@@ -306,7 +314,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
                   amount: amount,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
-                ref.invalidate(salesProvider);
+                _refreshAfterOperation();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment recorded successfully')));
                 }
