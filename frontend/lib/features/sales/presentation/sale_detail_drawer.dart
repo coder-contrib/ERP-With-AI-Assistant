@@ -554,6 +554,14 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
                 widget.onPaymentRecorded();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Payment of ${amount.toStringAsFixed(2)} EGP recorded successfully'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                }
               } catch (e) {
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
