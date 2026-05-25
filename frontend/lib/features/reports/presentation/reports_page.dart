@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -36,13 +37,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     ref.invalidate(reportsCashFlowProvider);
   }
 
+  void _printReport() {
+    html.window.print();
+  }
+
   @override
   Widget build(BuildContext context) {
     final profitAsync = ref.watch(reportsMonthlyProfitProvider);
     final cashFlowAsync = ref.watch(reportsCashFlowProvider);
     final customersAsync = ref.watch(reportsCustomerBalancesProvider);
     final suppliersAsync = ref.watch(reportsSupplierBalancesProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: Column(
@@ -56,6 +60,17 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
                 const SizedBox(width: 12),
                 const Text('Reports', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                 const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _printReport,
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Print'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
+                const SizedBox(width: 12),
                 IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
               ],
             ),
@@ -98,10 +113,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
             child: TabBarView(
               controller: _tabController,
               children: [
-                _SalesReportTab(),
-                _FinancialReportTab(),
-                _InventoryReportTab(),
-                _CustomerReportTab(),
+                _SalesReportTab(onPrint: _printReport),
+                _FinancialReportTab(onPrint: _printReport),
+                _InventoryReportTab(onPrint: _printReport),
+                _CustomerReportTab(onPrint: _printReport),
               ],
             ),
           ),
@@ -167,6 +182,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
 
 // ─── Sales Report Tab ────────────────────────────────────────────────────────
 class _SalesReportTab extends ConsumerWidget {
+  final VoidCallback onPrint;
+  const _SalesReportTab({required this.onPrint});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(reportsDailySalesProvider);
@@ -178,7 +196,9 @@ class _SalesReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Daily Sales Table
+          _reportHeader('Sales Report', onPrint),
+          const SizedBox(height: 16),
+
           _sectionTitle('Daily Sales (Last 30 Days)'),
           const SizedBox(height: 12),
           salesAsync.when(
@@ -197,9 +217,9 @@ class _SalesReportTab extends ConsumerWidget {
                 rows: days.map<DataRow>((d) => DataRow(cells: [
                   DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
                   DataCell(Text('${d['invoice_count']}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${_fmtAmount(d['total_sales'])}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                  DataCell(Text('${_fmtAmount(d['cash_collected'])}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${_fmtAmount(d['credit_sales'])}', style: const TextStyle(fontSize: 13))),
+                  DataCell(Text(_fmtAmount(d['total_sales']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                  DataCell(Text(_fmtAmount(d['cash_collected']), style: const TextStyle(fontSize: 13))),
+                  DataCell(Text(_fmtAmount(d['credit_sales']), style: const TextStyle(fontSize: 13))),
                 ])).toList(),
               ));
             },
@@ -208,7 +228,6 @@ class _SalesReportTab extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // Top Products
           _sectionTitle('Top Selling Products'),
           const SizedBox(height: 12),
           topAsync.when(
@@ -227,7 +246,7 @@ class _SalesReportTab extends ConsumerWidget {
                   DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
                   DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
                   DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${_fmtAmount(e.value['total_revenue'])}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                  DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
                 ])).toList(),
               ));
             },
@@ -242,6 +261,9 @@ class _SalesReportTab extends ConsumerWidget {
 
 // ─── Financial Report Tab ────────────────────────────────────────────────────
 class _FinancialReportTab extends ConsumerWidget {
+  final VoidCallback onPrint;
+  const _FinancialReportTab({required this.onPrint});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profitAsync = ref.watch(reportsMonthlyProfitProvider);
@@ -253,6 +275,9 @@ class _FinancialReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _reportHeader('Financial Report', onPrint),
+          const SizedBox(height: 16),
+
           _sectionTitle('Monthly P&L'),
           const SizedBox(height: 12),
           profitAsync.when(
@@ -333,6 +358,9 @@ class _FinancialReportTab extends ConsumerWidget {
 
 // ─── Inventory Report Tab ────────────────────────────────────────────────────
 class _InventoryReportTab extends ConsumerWidget {
+  final VoidCallback onPrint;
+  const _InventoryReportTab({required this.onPrint});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryAsync = ref.watch(reportsInventoryProvider);
@@ -343,6 +371,9 @@ class _InventoryReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _reportHeader('Inventory Report', onPrint),
+          const SizedBox(height: 16),
+
           _sectionTitle('Inventory Valuation'),
           const SizedBox(height: 12),
           inventoryAsync.when(
@@ -396,6 +427,9 @@ class _InventoryReportTab extends ConsumerWidget {
 
 // ─── Customer Report Tab ─────────────────────────────────────────────────────
 class _CustomerReportTab extends ConsumerWidget {
+  final VoidCallback onPrint;
+  const _CustomerReportTab({required this.onPrint});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final customersAsync = ref.watch(reportsCustomerBalancesProvider);
@@ -407,6 +441,9 @@ class _CustomerReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _reportHeader('Customer & Supplier Report', onPrint),
+          const SizedBox(height: 16),
+
           _sectionTitle('Customer Receivables'),
           const SizedBox(height: 12),
           customersAsync.when(
@@ -468,6 +505,35 @@ class _CustomerReportTab extends ConsumerWidget {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+Widget _reportHeader(String title, VoidCallback onPrint) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: AppColors.primary.withOpacity(0.03),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.description_outlined, color: AppColors.primary, size: 20),
+        const SizedBox(width: 10),
+        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        const Spacer(),
+        OutlinedButton.icon(
+          onPressed: onPrint,
+          icon: const Icon(Icons.print, size: 16),
+          label: const Text('Print Report'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 Widget _sectionTitle(String title) {
   return Row(children: [
     Container(width: 4, height: 20, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
