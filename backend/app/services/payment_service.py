@@ -4,6 +4,7 @@ from app.database import transaction
 from app.repositories.payment_repo import PaymentRepository
 from app.repositories.customer_repo import CustomerRepository
 from app.repositories.supplier_repo import SupplierRepository
+from app.repositories.sales_repo import SalesRepository
 from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
 from app.core.validators import Validator
@@ -19,6 +20,7 @@ class PaymentService:
         self.payment_repo = PaymentRepository(db)
         self.customer_repo = CustomerRepository(db)
         self.supplier_repo = SupplierRepository(db)
+        self.sales_repo = SalesRepository(db)
         self.cash = CashService(db)
         self.ledger = LedgerService(db)
         self.validator = Validator(db)
@@ -43,6 +45,25 @@ class PaymentService:
                 payment_id=payment.payment_id,
                 amount=data.payment_amount,
             )
+
+            if data.related_invoice_id:
+                invoice = self.sales_repo.get_by_id(data.related_invoice_id)
+                if invoice:
+                    new_paid = Decimal(str(invoice.paid_amount or 0)) + Decimal(str(data.payment_amount))
+                    total = Decimal(str(invoice.total_amount or 0)) - Decimal(str(invoice.discount_amount or 0))
+                    new_remaining = max(total - new_paid, Decimal("0"))
+
+                    if new_remaining <= 0:
+                        status = "paid"
+                    elif new_paid > 0:
+                        status = "partial"
+                    else:
+                        status = "unpaid"
+
+                    invoice.paid_amount = new_paid
+                    invoice.remaining_amount = new_remaining
+                    invoice.payment_status = status
+                    self.db.flush()
 
         self.event_bus.publish(Event(
             event_type=PAYMENT_RECEIVED,
