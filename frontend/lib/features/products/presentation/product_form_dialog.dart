@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../data/products_repository.dart';
 import 'products_provider.dart';
 
@@ -143,7 +144,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         }
       }
 
-      ref.invalidate(productsProvider);
+      invalidateAfterProductChange(ref);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {

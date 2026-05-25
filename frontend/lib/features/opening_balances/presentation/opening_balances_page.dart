@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../../customers/data/customers_repository.dart';
 import '../../customers/presentation/customers_provider.dart';
 import '../../suppliers/data/suppliers_repository.dart';
@@ -143,6 +144,7 @@ class _CustomerOpeningBalanceTabState extends ConsumerState<_CustomerOpeningBala
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
       ref.invalidate(openingBalancesProvider);
+      invalidateDashboard(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Customer opening balance saved'), backgroundColor: AppColors.success),
@@ -347,6 +349,7 @@ class _SupplierOpeningBalanceTabState extends ConsumerState<_SupplierOpeningBala
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
       ref.invalidate(openingBalancesProvider);
+      invalidateDashboard(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Supplier opening balance saved'), backgroundColor: AppColors.success),
@@ -537,6 +540,7 @@ class _CashOpeningBalanceTabState extends ConsumerState<_CashOpeningBalanceTab> 
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
       ref.invalidate(openingBalancesProvider);
+      invalidateDashboard(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cash/Bank opening balance saved'), backgroundColor: AppColors.success),
