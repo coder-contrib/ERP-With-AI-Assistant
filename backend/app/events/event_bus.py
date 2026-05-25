@@ -33,7 +33,6 @@ class EventBus:
                 handler(event)
             except Exception as e:
                 logger.error(f"Event handler failed for {event.event_type}: {e}")
-                raise
 
         for handler in self._global_handlers:
             try:
