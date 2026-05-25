@@ -6,24 +6,42 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _dispatch_async(coro):
+    """Safely dispatch an async coroutine from any context (sync or async)."""
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(coro)
+    except RuntimeError:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.run_coroutine_threadsafe(coro, loop)
+            else:
+                loop.run_until_complete(coro)
+        except RuntimeError:
+            import threading
+            thread = threading.Thread(target=asyncio.run, args=(coro,), daemon=True)
+            thread.start()
+
+
 def handle_realtime_sale(event: Event):
     """Push sale event to dashboard WebSocket channel."""
-    asyncio.create_task(_broadcast_sale(event))
+    _dispatch_async(_broadcast_sale(event))
 
 
 def handle_realtime_inventory(event: Event):
     """Push inventory update to inventory WebSocket channel."""
-    asyncio.create_task(_broadcast_inventory(event))
+    _dispatch_async(_broadcast_inventory(event))
 
 
 def handle_realtime_notification(event: Event):
     """Push notification to all connected users."""
-    asyncio.create_task(_broadcast_notification(event))
+    _dispatch_async(_broadcast_notification(event))
 
 
 def handle_realtime_payment(event: Event):
     """Push payment event to dashboard."""
-    asyncio.create_task(_broadcast_payment(event))
+    _dispatch_async(_broadcast_payment(event))
 
 
 async def _broadcast_sale(event: Event):
