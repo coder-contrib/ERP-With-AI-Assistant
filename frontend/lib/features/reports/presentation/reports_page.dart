@@ -1,8 +1,8 @@
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/kpi_card.dart';
+import '../../../core/utils/print_helper.dart';
 import 'reports_provider.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
@@ -37,10 +37,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     ref.invalidate(reportsCashFlowProvider);
   }
 
-  void _printReport() {
-    html.window.print();
-  }
-
   @override
   Widget build(BuildContext context) {
     final profitAsync = ref.watch(reportsMonthlyProfitProvider);
@@ -51,7 +47,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     return Scaffold(
       body: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
             child: Row(
@@ -60,37 +55,19 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
                 const SizedBox(width: 12),
                 const Text('Reports', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                 const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: _printReport,
-                  icon: const Icon(Icons.print, size: 18),
-                  label: const Text('Print'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
-                ),
-                const SizedBox(width: 12),
                 IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // KPI Cards
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: _buildKPIRow(profitAsync, cashFlowAsync, customersAsync, suppliersAsync),
           ),
           const SizedBox(height: 20),
-
-          // Tabs
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
             child: TabBar(
               controller: _tabController,
               indicator: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
@@ -107,16 +84,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
             ),
           ),
           const SizedBox(height: 16),
-
-          // Tab content
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _SalesReportTab(onPrint: _printReport),
-                _FinancialReportTab(onPrint: _printReport),
-                _InventoryReportTab(onPrint: _printReport),
-                _CustomerReportTab(onPrint: _printReport),
+              children: const [
+                _SalesReportTab(),
+                _FinancialReportTab(),
+                _InventoryReportTab(),
+                _CustomerReportTab(),
               ],
             ),
           ),
@@ -182,8 +157,32 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
 
 // ─── Sales Report Tab ────────────────────────────────────────────────────────
 class _SalesReportTab extends ConsumerWidget {
-  final VoidCallback onPrint;
-  const _SalesReportTab({required this.onPrint});
+  const _SalesReportTab();
+
+  void _print(Map<String, dynamic> salesData, Map<String, dynamic> topData) {
+    final days = (salesData['data'] as List?) ?? [];
+    final products = (topData['data'] as List?) ?? [];
+
+    var tableHtml = buildTableHtml(
+      sectionTitle: 'Daily Sales (Last 30 Days)',
+      headers: ['Date', 'Invoices', 'Total Sales', 'Cash Collected', 'Credit Sales'],
+      rows: days.map<List<String>>((d) => [
+        d['date'] ?? '', '${d['invoice_count']}',
+        '${_fmtAmount(d['total_sales'])} IQD', '${_fmtAmount(d['cash_collected'])} IQD', '${_fmtAmount(d['credit_sales'])} IQD',
+      ]).toList(),
+    );
+
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Top Selling Products',
+      headers: ['#', 'Product', 'Qty Sold', 'Revenue'],
+      rows: products.asMap().entries.map<List<String>>((e) => [
+        '${e.key + 1}', e.value['product_name'] ?? '',
+        '${e.value['total_quantity']}', '${_fmtAmount(e.value['total_revenue'])} IQD',
+      ]).toList(),
+    );
+
+    printReportHtml(title: 'Sales Report', tableHtml: tableHtml);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -196,9 +195,12 @@ class _SalesReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Sales Report', onPrint),
+          _reportHeader('Sales Report', () {
+            final sales = salesAsync.valueOrNull ?? {};
+            final top = topAsync.valueOrNull ?? {};
+            _print(sales, top);
+          }),
           const SizedBox(height: 16),
-
           _sectionTitle('Daily Sales (Last 30 Days)'),
           const SizedBox(height: 12),
           salesAsync.when(
@@ -227,7 +229,6 @@ class _SalesReportTab extends ConsumerWidget {
             error: (e, _) => Text('Error: $e'),
           ),
           const SizedBox(height: 24),
-
           _sectionTitle('Top Selling Products'),
           const SizedBox(height: 12),
           topAsync.when(
@@ -261,8 +262,36 @@ class _SalesReportTab extends ConsumerWidget {
 
 // ─── Financial Report Tab ────────────────────────────────────────────────────
 class _FinancialReportTab extends ConsumerWidget {
-  final VoidCallback onPrint;
-  const _FinancialReportTab({required this.onPrint});
+  const _FinancialReportTab();
+
+  void _print(Map<String, dynamic> profitData, Map<String, dynamic> cashData) {
+    final months = (profitData['data'] as List?) ?? [];
+    final flowData = cashData['data'] as Map<String, dynamic>? ?? {};
+    final days = (flowData['days'] as List?) ?? [];
+
+    var tableHtml = buildTableHtml(
+      sectionTitle: 'Monthly Profit & Loss',
+      headers: ['Month', 'Revenue', 'COGS', 'Gross Profit', 'Expenses', 'Net Profit', 'Margin'],
+      rows: months.map<List<String>>((m) => [
+        m['month'] ?? '', '${_fmtAmount(m['revenue'])} IQD', '${_fmtAmount(m['cogs'])} IQD',
+        '${_fmtAmount(m['gross_profit'])} IQD', '${_fmtAmount(m['expenses'])} IQD',
+        '${_fmtAmount(m['net_profit'])} IQD', '${m['gross_margin']}%',
+      ]).toList(),
+    );
+
+    tableHtml += '<br><p style="font-size:14px;margin:10px 0;"><strong>Summary:</strong> Total In: ${_fmtAmount(flowData['total_in'])} IQD | Total Out: ${_fmtAmount(flowData['total_out'])} IQD | Net: ${_fmtAmount(flowData['net_flow'])} IQD</p>';
+
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Cash Flow (Last 30 Days)',
+      headers: ['Date', 'Cash In', 'Cash Out', 'Net'],
+      rows: days.map<List<String>>((d) => [
+        d['date'] ?? '', '${_fmtAmount(d['cash_in'])} IQD',
+        '${_fmtAmount(d['cash_out'])} IQD', '${_fmtAmount(d['net'])} IQD',
+      ]).toList(),
+    );
+
+    printReportHtml(title: 'Financial Report', tableHtml: tableHtml);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -275,9 +304,12 @@ class _FinancialReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Financial Report', onPrint),
+          _reportHeader('Financial Report', () {
+            final profit = profitAsync.valueOrNull ?? {};
+            final cash = cashFlowAsync.valueOrNull ?? {};
+            _print(profit, cash);
+          }),
           const SizedBox(height: 16),
-
           _sectionTitle('Monthly P&L'),
           const SizedBox(height: 12),
           profitAsync.when(
@@ -310,7 +342,6 @@ class _FinancialReportTab extends ConsumerWidget {
             error: (e, _) => Text('Error: $e'),
           ),
           const SizedBox(height: 24),
-
           _sectionTitle('Cash Flow (Last 30 Days)'),
           const SizedBox(height: 12),
           cashFlowAsync.when(
@@ -358,8 +389,24 @@ class _FinancialReportTab extends ConsumerWidget {
 
 // ─── Inventory Report Tab ────────────────────────────────────────────────────
 class _InventoryReportTab extends ConsumerWidget {
-  final VoidCallback onPrint;
-  const _InventoryReportTab({required this.onPrint});
+  const _InventoryReportTab();
+
+  void _print(Map<String, dynamic> data) {
+    final valuation = data['data'] as Map<String, dynamic>? ?? {};
+    final warehouses = (valuation['warehouses'] as List?) ?? [];
+
+    var tableHtml = '<p style="font-size:16px;font-weight:bold;margin-bottom:15px;">Total Inventory Value: ${_fmtAmount(valuation['grand_total_value'])} IQD</p>';
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Inventory Valuation by Warehouse',
+      headers: ['Warehouse', 'Products', 'Total Qty', 'Value (IQD)'],
+      rows: warehouses.map<List<String>>((w) => [
+        w['warehouse_name'] ?? '', '${w['product_count']}',
+        '${w['total_quantity']}', '${_fmtAmount(w['total_value'])} IQD',
+      ]).toList(),
+    );
+
+    printReportHtml(title: 'Inventory Report', tableHtml: tableHtml);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -371,9 +418,11 @@ class _InventoryReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Inventory Report', onPrint),
+          _reportHeader('Inventory Report', () {
+            final data = inventoryAsync.valueOrNull ?? {};
+            _print(data);
+          }),
           const SizedBox(height: 16),
-
           _sectionTitle('Inventory Valuation'),
           const SizedBox(height: 12),
           inventoryAsync.when(
@@ -427,8 +476,33 @@ class _InventoryReportTab extends ConsumerWidget {
 
 // ─── Customer Report Tab ─────────────────────────────────────────────────────
 class _CustomerReportTab extends ConsumerWidget {
-  final VoidCallback onPrint;
-  const _CustomerReportTab({required this.onPrint});
+  const _CustomerReportTab();
+
+  void _print(Map<String, dynamic> custData, Map<String, dynamic> suppData) {
+    final customers = (custData['data'] as List?) ?? [];
+    final suppliers = (suppData['data'] as List?) ?? [];
+
+    var tableHtml = '<p style="font-size:14px;margin-bottom:10px;"><strong>Total Receivables: ${_fmtAmount(custData['total_receivable'])} IQD</strong></p>';
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Customer Receivables',
+      headers: ['Customer', 'Balance (IQD)', 'Credit Limit (IQD)', 'Status'],
+      rows: customers.map<List<String>>((c) => [
+        c['customer_name'] ?? '', '${_fmtAmount(c['current_balance'])} IQD',
+        '${_fmtAmount(c['credit_limit'])} IQD', c['over_limit'] == true ? 'OVER LIMIT' : 'OK',
+      ]).toList(),
+    );
+
+    tableHtml += '<br><p style="font-size:14px;margin-bottom:10px;"><strong>Total Payables: ${_fmtAmount(suppData['total_payable'])} IQD</strong></p>';
+    tableHtml += buildTableHtml(
+      sectionTitle: 'Supplier Payables',
+      headers: ['Supplier', 'Balance (IQD)', 'Payment Terms (days)'],
+      rows: suppliers.map<List<String>>((s) => [
+        s['supplier_name'] ?? '', '${_fmtAmount(s['current_balance'])} IQD', '${s['payment_terms']}',
+      ]).toList(),
+    );
+
+    printReportHtml(title: 'Customer & Supplier Report', tableHtml: tableHtml);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -441,9 +515,12 @@ class _CustomerReportTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Customer & Supplier Report', onPrint),
+          _reportHeader('Customer & Supplier Report', () {
+            final cust = customersAsync.valueOrNull ?? {};
+            final supp = suppliersAsync.valueOrNull ?? {};
+            _print(cust, supp);
+          }),
           const SizedBox(height: 16),
-
           _sectionTitle('Customer Receivables'),
           const SizedBox(height: 12),
           customersAsync.when(
@@ -474,7 +551,6 @@ class _CustomerReportTab extends ConsumerWidget {
             error: (e, _) => Text('Error: $e'),
           ),
           const SizedBox(height: 24),
-
           _sectionTitle('Supplier Payables'),
           const SizedBox(height: 12),
           suppliersAsync.when(
@@ -519,14 +595,14 @@ Widget _reportHeader(String title, VoidCallback onPrint) {
         const SizedBox(width: 10),
         Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
         const Spacer(),
-        OutlinedButton.icon(
+        ElevatedButton.icon(
           onPressed: onPrint,
           icon: const Icon(Icons.print, size: 16),
           label: const Text('Print Report'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.primary,
-            side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
         ),
       ],
