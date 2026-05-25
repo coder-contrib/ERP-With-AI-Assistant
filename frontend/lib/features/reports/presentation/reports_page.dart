@@ -60,16 +60,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
             decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
             child: TabBar(
               controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
+              isScrollable: false,
               indicator: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
               labelColor: Colors.white,
               unselectedLabelColor: AppColors.primary,
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
+              labelPadding: EdgeInsets.zero,
               tabs: const [
                 Tab(text: 'Daily Sales', icon: Icon(Icons.receipt_long, size: 16)),
-                Tab(text: 'Monthly Profit', icon: Icon(Icons.trending_up, size: 16)),
+                Tab(text: 'Profit', icon: Icon(Icons.trending_up, size: 16)),
                 Tab(text: 'Top Products', icon: Icon(Icons.star, size: 16)),
                 Tab(text: 'Inventory', icon: Icon(Icons.warehouse, size: 16)),
                 Tab(text: 'Customers', icon: Icon(Icons.people, size: 16)),
@@ -124,7 +124,7 @@ class _DailySalesTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Daily Sales Report', () {
             final sales = salesAsync.valueOrNull ?? {};
@@ -135,23 +135,19 @@ class _DailySalesTab extends ConsumerWidget {
             data: (data) {
               final days = (data['data'] as List?) ?? [];
               if (days.isEmpty) return const Text('No sales data available');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Invoices', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Total Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Cash Collected', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Credit Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                ],
-                rows: days.map<DataRow>((d) => DataRow(cells: [
-                  DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${d['invoice_count']}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(d['total_sales']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                  DataCell(Text(_fmtAmount(d['cash_collected']), style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(d['credit_sales']), style: const TextStyle(fontSize: 13))),
-                ])).toList(),
-              ));
+              return _buildFullWidthTable(isDark, columns: const [
+                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Invoices', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Total Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Cash Collected', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Credit Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+              ], rows: days.map<DataRow>((d) => DataRow(cells: [
+                DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
+                DataCell(Text('${d['invoice_count']}', style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(d['total_sales']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                DataCell(Text(_fmtAmount(d['cash_collected']), style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(d['credit_sales']), style: const TextStyle(fontSize: 13))),
+              ])).toList());
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -188,7 +184,7 @@ class _MonthlyProfitTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Monthly Profit & Loss', () {
             final profit = profitAsync.valueOrNull ?? {};
@@ -199,27 +195,23 @@ class _MonthlyProfitTab extends ConsumerWidget {
             data: (data) {
               final months = (data['data'] as List?) ?? [];
               if (months.isEmpty) return const Text('No profit data');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('Month', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('COGS', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Gross Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Expenses', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Net Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Margin', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                ],
-                rows: months.map<DataRow>((m) => DataRow(cells: [
-                  DataCell(Text(m['month'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(m['revenue']), style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(m['cogs']), style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(m['gross_profit']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success))),
-                  DataCell(Text(_fmtAmount(m['expenses']), style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(m['net_profit']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(m['net_profit'])))),
-                  DataCell(Text('${m['gross_margin']}%', style: const TextStyle(fontSize: 13))),
-                ])).toList(),
-              ));
+              return _buildFullWidthTable(isDark, columns: const [
+                DataColumn(label: Text('Month', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('COGS', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Gross Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Expenses', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Net Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Margin', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+              ], rows: months.map<DataRow>((m) => DataRow(cells: [
+                DataCell(Text(m['month'] ?? '', style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(m['revenue']), style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(m['cogs']), style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(m['gross_profit']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success))),
+                DataCell(Text(_fmtAmount(m['expenses']), style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(m['net_profit']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(m['net_profit'])))),
+                DataCell(Text('${m['gross_margin']}%', style: const TextStyle(fontSize: 13))),
+              ])).toList());
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -255,7 +247,7 @@ class _TopProductsTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Top Selling Products', () {
             final top = topAsync.valueOrNull ?? {};
@@ -266,21 +258,17 @@ class _TopProductsTab extends ConsumerWidget {
             data: (data) {
               final products = (data['data'] as List?) ?? [];
               if (products.isEmpty) return const Text('No product data');
-              return _buildContainer(isDark, child: DataTable(
-                headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                columns: const [
-                  DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
-                  DataColumn(label: Text('Qty Sold', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                ],
-                rows: products.asMap().entries.map<DataRow>((e) => DataRow(cells: [
-                  DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                  DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                ])).toList(),
-              ));
+              return _buildFullWidthTable(isDark, columns: const [
+                DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
+                DataColumn(label: Text('Qty Sold', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+              ], rows: products.asMap().entries.map<DataRow>((e) => DataRow(cells: [
+                DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
+                DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
+                DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+              ])).toList());
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
@@ -319,7 +307,7 @@ class _InventoryTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Inventory Valuation', () {
             final data = inventoryAsync.valueOrNull ?? {};
@@ -331,7 +319,7 @@ class _InventoryTab extends ConsumerWidget {
               final valuation = data['data'] as Map<String, dynamic>? ?? {};
               final warehouses = (valuation['warehouses'] as List?) ?? [];
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -348,21 +336,17 @@ class _InventoryTab extends ConsumerWidget {
                     ]),
                   ),
                   const SizedBox(height: 16),
-                  _buildContainer(isDark, child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                    columns: const [
-                      DataColumn(label: Text('Warehouse', style: TextStyle(fontWeight: FontWeight.w600))),
-                      DataColumn(label: Text('Products', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Total Qty', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    ],
-                    rows: warehouses.map<DataRow>((w) => DataRow(cells: [
-                      DataCell(Text(w['warehouse_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text('${w['product_count']}', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text('${w['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text('${_fmtAmount(w['total_value'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                    ])).toList(),
-                  )),
+                  _buildFullWidthTable(isDark, columns: const [
+                    DataColumn(label: Text('Warehouse', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Products', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Total Qty', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                  ], rows: warehouses.map<DataRow>((w) => DataRow(cells: [
+                    DataCell(Text(w['warehouse_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text('${w['product_count']}', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text('${w['total_quantity']}', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text('${_fmtAmount(w['total_value'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                  ])).toList()),
                 ],
               );
             },
@@ -401,7 +385,7 @@ class _CustomerBalancesTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Customer Balances', () {
             final cust = customersAsync.valueOrNull ?? {};
@@ -413,29 +397,25 @@ class _CustomerBalancesTab extends ConsumerWidget {
               final customers = (data['data'] as List?) ?? [];
               if (customers.isEmpty) return const Text('No receivables');
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _statBadge('Total Receivables', data['total_receivable'], AppColors.warning),
                   const SizedBox(height: 16),
-                  _buildContainer(isDark, child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                    columns: const [
-                      DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.w600))),
-                      DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Credit Limit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                    ],
-                    rows: customers.map<DataRow>((c) => DataRow(cells: [
-                      DataCell(Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text('${_fmtAmount(c['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                      DataCell(Text('${_fmtAmount(c['credit_limit'])} IQD', style: const TextStyle(fontSize: 13))),
-                      DataCell(c['over_limit'] == true
-                        ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                            child: const Text('Over Limit', style: TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)))
-                        : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                            child: const Text('OK', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600)))),
-                    ])).toList(),
-                  )),
+                  _buildFullWidthTable(isDark, columns: const [
+                    DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Credit Limit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
+                  ], rows: customers.map<DataRow>((c) => DataRow(cells: [
+                    DataCell(Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text('${_fmtAmount(c['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                    DataCell(Text('${_fmtAmount(c['credit_limit'])} IQD', style: const TextStyle(fontSize: 13))),
+                    DataCell(c['over_limit'] == true
+                      ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                          child: const Text('Over Limit', style: TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)))
+                      : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                          child: const Text('OK', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600)))),
+                  ])).toList()),
                 ],
               );
             },
@@ -473,7 +453,7 @@ class _SupplierBalancesTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Supplier Balances', () {
             final supp = suppliersAsync.valueOrNull ?? {};
@@ -485,23 +465,19 @@ class _SupplierBalancesTab extends ConsumerWidget {
               final suppliers = (data['data'] as List?) ?? [];
               if (suppliers.isEmpty) return const Text('No payables');
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _statBadge('Total Payables', data['total_payable'], AppColors.error),
                   const SizedBox(height: 16),
-                  _buildContainer(isDark, child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                    columns: const [
-                      DataColumn(label: Text('Supplier', style: TextStyle(fontWeight: FontWeight.w600))),
-                      DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Terms (days)', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    ],
-                    rows: suppliers.map<DataRow>((s) => DataRow(cells: [
-                      DataCell(Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text('${_fmtAmount(s['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                      DataCell(Text('${s['payment_terms']}', style: const TextStyle(fontSize: 13))),
-                    ])).toList(),
-                  )),
+                  _buildFullWidthTable(isDark, columns: const [
+                    DataColumn(label: Text('Supplier', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Terms (days)', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                  ], rows: suppliers.map<DataRow>((s) => DataRow(cells: [
+                    DataCell(Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text('${_fmtAmount(s['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                    DataCell(Text('${s['payment_terms']}', style: const TextStyle(fontSize: 13))),
+                  ])).toList()),
                 ],
               );
             },
@@ -542,7 +518,7 @@ class _CashFlowTab extends ConsumerWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _reportHeader('Cash Flow Report', () {
             final cash = cashFlowAsync.valueOrNull ?? {};
@@ -555,7 +531,7 @@ class _CashFlowTab extends ConsumerWidget {
               final days = (flowData['days'] as List?) ?? [];
               if (days.isEmpty) return const Text('No cash flow data');
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(children: [
                     _statBadge('Total In', flowData['total_in'], AppColors.success),
@@ -565,21 +541,17 @@ class _CashFlowTab extends ConsumerWidget {
                     _statBadge('Net Flow', flowData['net_flow'], AppColors.info),
                   ]),
                   const SizedBox(height: 16),
-                  _buildContainer(isDark, child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-                    columns: const [
-                      DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                      DataColumn(label: Text('Cash In', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Cash Out', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                      DataColumn(label: Text('Net', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    ],
-                    rows: days.map<DataRow>((d) => DataRow(cells: [
-                      DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
-                      DataCell(Text(_fmtAmount(d['cash_in']), style: const TextStyle(fontSize: 13, color: AppColors.success))),
-                      DataCell(Text(_fmtAmount(d['cash_out']), style: const TextStyle(fontSize: 13, color: AppColors.error))),
-                      DataCell(Text(_fmtAmount(d['net']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(d['net'])))),
-                    ])).toList(),
-                  )),
+                  _buildFullWidthTable(isDark, columns: const [
+                    DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
+                    DataColumn(label: Text('Cash In', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Cash Out', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    DataColumn(label: Text('Net', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                  ], rows: days.map<DataRow>((d) => DataRow(cells: [
+                    DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
+                    DataCell(Text(_fmtAmount(d['cash_in']), style: const TextStyle(fontSize: 13, color: AppColors.success))),
+                    DataCell(Text(_fmtAmount(d['cash_out']), style: const TextStyle(fontSize: 13, color: AppColors.error))),
+                    DataCell(Text(_fmtAmount(d['net']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(d['net'])))),
+                  ])).toList()),
                 ],
               );
             },
@@ -622,7 +594,7 @@ Widget _reportHeader(String title, VoidCallback onPrint) {
   );
 }
 
-Widget _buildContainer(bool isDark, {required Widget child}) {
+Widget _buildFullWidthTable(bool isDark, {required List<DataColumn> columns, required List<DataRow> rows}) {
   return Container(
     width: double.infinity,
     decoration: BoxDecoration(
@@ -630,7 +602,19 @@ Widget _buildContainer(bool isDark, {required Widget child}) {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
     ),
-    child: ClipRRect(borderRadius: BorderRadius.circular(12), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: child)),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: double.infinity,
+        child: DataTable(
+          headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
+          columnSpacing: 24,
+          horizontalMargin: 16,
+          columns: columns,
+          rows: rows,
+        ),
+      ),
+    ),
   );
 }
 
