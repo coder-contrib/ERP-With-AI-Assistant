@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../data/inventory_repository.dart';
 import 'inventory_provider.dart';
@@ -35,7 +36,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     try {
       final repo = ref.read(inventoryRepositoryProvider);
       await repo.refreshCache();
-      ref.invalidate(inventoryDataProvider);
+      invalidateAfterInventoryChange(ref);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock refreshed')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -52,7 +53,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       builder: (_) => const OpeningStockDialog(),
     );
     if (result == true) {
-      ref.invalidate(inventoryDataProvider);
+      invalidateAfterInventoryChange(ref);
     }
   }
 
@@ -503,7 +504,7 @@ class _TransferDialogState extends State<_TransferDialog> {
                 quantity: double.parse(_qtyController.text),
                 unitType: widget.item.baseUnit,
               );
-              widget.ref.invalidate(inventoryDataProvider);
+              invalidateAfterInventoryChange(widget.ref);
               if (mounted) Navigator.pop(context);
             } catch (e) {
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
