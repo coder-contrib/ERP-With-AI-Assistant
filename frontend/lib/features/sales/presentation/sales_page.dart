@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../customers/data/customers_repository.dart';
@@ -27,7 +28,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
   }
 
   void _refreshAfterOperation() {
-    ref.invalidate(salesProvider);
+    invalidateAfterSale(ref);
     if (_selectedInvoice != null) {
       final repo = ref.read(salesRepositoryProvider);
       repo.getById(_selectedInvoice!.invoiceId).then((updated) {
@@ -247,7 +248,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => CreateSaleDialog(
-        onCreated: () => ref.invalidate(salesProvider),
+        onCreated: () => invalidateAfterSale(ref),
       ),
     );
   }
