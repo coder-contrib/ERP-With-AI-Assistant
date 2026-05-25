@@ -115,6 +115,17 @@ class SalesRepository {
     return SalesInvoiceModel.fromJson(response.data);
   }
 
+  Future<SalesInvoiceModel> update(int invoiceId, Map<String, dynamic> data) async {
+    final response = await _dio.put('/sales/$invoiceId', data: data);
+    return SalesInvoiceModel.fromJson(response.data);
+  }
+
+  Future<void> cancelInvoice(int invoiceId, {String? reason}) async {
+    await _dio.post('/sales/$invoiceId/cancel', data: {
+      if (reason != null) 'reason': reason,
+    });
+  }
+
   Future<void> recordPayment({required int customerId, int? invoiceId, required double amount, String? notes}) async {
     await _dio.post('/payments/customers', data: {
       'customer_id': customerId,
