@@ -61,6 +61,29 @@ class SalesInvoiceModel {
   bool get isCredit => invoiceType == 'credit';
 }
 
+class InvoicePaymentModel {
+  final int paymentId;
+  final double amount;
+  final String? paymentDate;
+  final String? notes;
+
+  InvoicePaymentModel({
+    required this.paymentId,
+    required this.amount,
+    this.paymentDate,
+    this.notes,
+  });
+
+  factory InvoicePaymentModel.fromJson(Map<String, dynamic> json) {
+    return InvoicePaymentModel(
+      paymentId: json['payment_id'],
+      amount: double.tryParse(json['payment_amount']?.toString() ?? '0') ?? 0,
+      paymentDate: json['payment_date'],
+      notes: json['notes'],
+    );
+  }
+}
+
 class SalesItemModel {
   final int itemId;
   final int productId;
@@ -124,6 +147,11 @@ class SalesRepository {
     await _dio.post('/sales/$invoiceId/cancel', data: {
       if (reason != null) 'reason': reason,
     });
+  }
+
+  Future<List<InvoicePaymentModel>> getInvoicePayments(int invoiceId) async {
+    final response = await _dio.get('/sales/$invoiceId/payments');
+    return (response.data as List).map((e) => InvoicePaymentModel.fromJson(e)).toList();
   }
 
   Future<void> recordPayment({required int customerId, int? invoiceId, required double amount, String? notes}) async {
