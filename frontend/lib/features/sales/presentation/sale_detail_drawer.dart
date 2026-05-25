@@ -28,12 +28,14 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
   bool _aiLoading = false;
   List<InvoicePaymentModel> _payments = [];
   bool _paymentsLoading = false;
+  List<InvoiceItemModel> _items = [];
+  bool _itemsLoading = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadPayments();
+    _loadData();
   }
 
   @override
@@ -42,14 +44,30 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
     super.dispose();
   }
 
-  Future<void> _loadPayments() async {
-    setState(() => _paymentsLoading = true);
+  Future<void> _loadData() async {
+    setState(() {
+      _paymentsLoading = true;
+      _itemsLoading = true;
+    });
+    final repo = ref.read(salesRepositoryProvider);
     try {
-      final repo = ref.read(salesRepositoryProvider);
-      final payments = await repo.getInvoicePayments(widget.invoice.invoiceId);
-      if (mounted) setState(() => _payments = payments);
+      final results = await Future.wait([
+        repo.getInvoicePayments(widget.invoice.invoiceId),
+        repo.getInvoiceItems(widget.invoice.invoiceId),
+      ]);
+      if (mounted) {
+        setState(() {
+          _payments = results[0] as List<InvoicePaymentModel>;
+          _items = results[1] as List<InvoiceItemModel>;
+        });
+      }
     } catch (_) {}
-    if (mounted) setState(() => _paymentsLoading = false);
+    if (mounted) {
+      setState(() {
+        _paymentsLoading = false;
+        _itemsLoading = false;
+      });
+    }
   }
 
   @override
@@ -126,6 +144,15 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _sectionTitle('Invoice Details'),
+          const SizedBox(height: 8),
+          _infoRow('Type', inv.invoiceType.toUpperCase(), isDark),
+          _infoRow('Warehouse', 'Warehouse ${inv.warehouseId}', isDark),
+          if (inv.invoiceDate != null) _infoRow('Date', _formatDate(inv.invoiceDate!), isDark),
+          _infoRow('Invoice ID', '#${inv.invoiceId}', isDark),
+          const SizedBox(height: 16),
+          _buildProductsList(isDark),
+          const SizedBox(height: 16),
           _sectionTitle('Financial Summary'),
           const SizedBox(height: 8),
           _infoRow('Total Amount', '${inv.total.toStringAsFixed(2)} EGP', isDark),
@@ -147,16 +174,101 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
             Text('${(inv.paid / (inv.total > 0 ? inv.total : 1) * 100).toStringAsFixed(0)}% paid', style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
             const SizedBox(height: 16),
           ],
-          _sectionTitle('Invoice Details'),
-          const SizedBox(height: 8),
-          _infoRow('Type', inv.invoiceType.toUpperCase(), isDark),
-          _infoRow('Warehouse', 'Warehouse ${inv.warehouseId}', isDark),
-          if (inv.invoiceDate != null) _infoRow('Date', _formatDate(inv.invoiceDate!), isDark),
-          _infoRow('Invoice ID', '#${inv.invoiceId}', isDark),
-          const SizedBox(height: 16),
           _buildPaymentHistory(isDark),
         ],
       ),
+    );
+  }
+
+  Widget _buildProductsList(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _sectionTitle('Products'),
+            const SizedBox(width: 6),
+            if (!_itemsLoading && _items.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                child: Text('${_items.length}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
+              ),
+            const Spacer(),
+            if (_itemsLoading)
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_items.isEmpty && !_itemsLoading)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+            ),
+            child: Text(
+              'No items found',
+              style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ..._items.map((item) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.productName,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${item.soldQuantity % 1 == 0 ? item.soldQuantity.toInt() : item.soldQuantity.toStringAsFixed(2)} ${item.unitType} × ${item.unitPrice.toStringAsFixed(2)} EGP',
+                      style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${item.totalPrice.toStringAsFixed(2)} EGP',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  if (item.discount > 0)
+                    Text(
+                      '-${item.discount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.error),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        )),
+      ],
     );
   }
 
@@ -379,6 +491,27 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
   </table>
 </div>
 ''';
+
+    if (_items.isNotEmpty) {
+      tableHtml += buildTableHtml(
+        sectionTitle: 'Products',
+        headers: ['#', 'Product', 'Qty', 'Unit', 'Price', 'Discount', 'Total'],
+        rows: _items.asMap().entries.map((entry) {
+          final i = entry.key + 1;
+          final item = entry.value;
+          final qty = item.soldQuantity % 1 == 0 ? '${item.soldQuantity.toInt()}' : item.soldQuantity.toStringAsFixed(2);
+          return [
+            '$i',
+            item.productName,
+            qty,
+            item.unitType,
+            item.unitPrice.toStringAsFixed(2),
+            item.discount.toStringAsFixed(2),
+            item.totalPrice.toStringAsFixed(2),
+          ];
+        }).toList(),
+      );
+    }
 
     tableHtml += buildTableHtml(
       sectionTitle: 'Payment Summary',
