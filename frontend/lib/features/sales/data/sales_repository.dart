@@ -84,6 +84,41 @@ class InvoicePaymentModel {
   }
 }
 
+class InvoiceItemModel {
+  final int itemId;
+  final int productId;
+  final String productName;
+  final double soldQuantity;
+  final String unitType;
+  final double unitPrice;
+  final double discount;
+  final double totalPrice;
+
+  InvoiceItemModel({
+    required this.itemId,
+    required this.productId,
+    required this.productName,
+    required this.soldQuantity,
+    required this.unitType,
+    required this.unitPrice,
+    required this.discount,
+    required this.totalPrice,
+  });
+
+  factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
+    return InvoiceItemModel(
+      itemId: json['item_id'] ?? 0,
+      productId: json['product_id'],
+      productName: json['product_name'] ?? 'Unknown Product',
+      soldQuantity: double.tryParse(json['sold_quantity']?.toString() ?? '0') ?? 0,
+      unitType: json['unit_type'] ?? 'meter',
+      unitPrice: double.tryParse(json['unit_price']?.toString() ?? '0') ?? 0,
+      discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0,
+      totalPrice: double.tryParse(json['total_price']?.toString() ?? '0') ?? 0,
+    );
+  }
+}
+
 class SalesItemModel {
   final int itemId;
   final int productId;
@@ -152,6 +187,11 @@ class SalesRepository {
   Future<List<InvoicePaymentModel>> getInvoicePayments(int invoiceId) async {
     final response = await _dio.get('/sales/$invoiceId/payments');
     return (response.data as List).map((e) => InvoicePaymentModel.fromJson(e)).toList();
+  }
+
+  Future<List<InvoiceItemModel>> getInvoiceItems(int invoiceId) async {
+    final response = await _dio.get('/sales/$invoiceId/items');
+    return (response.data as List).map((e) => InvoiceItemModel.fromJson(e)).toList();
   }
 
   Future<void> recordPayment({required int customerId, int? invoiceId, required double amount, String? notes}) async {
