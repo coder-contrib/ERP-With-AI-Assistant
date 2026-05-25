@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../data/purchases_repository.dart';
 import '../../suppliers/data/suppliers_repository.dart';
 import '../../products/data/products_repository.dart';
@@ -101,7 +102,7 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
     try {
       final repo = ref.read(purchasesRepositoryProvider);
       await repo.create(data);
-      ref.invalidate(purchasesProvider);
+      invalidateAfterPurchase(ref);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
