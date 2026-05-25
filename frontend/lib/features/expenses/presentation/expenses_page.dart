@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../../../core/widgets/kpi_card.dart';
 import '../data/expenses_repository.dart';
 import 'expenses_provider.dart';
@@ -293,8 +294,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     if (confirmed == true) {
       final repo = ref.read(expensesRepositoryProvider);
       await repo.delete(id);
-      ref.invalidate(expensesProvider);
-      ref.invalidate(expensesSummaryProvider);
+      invalidateAfterExpense(ref);
     }
   }
 
@@ -304,8 +304,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       builder: (_) => const AddExpenseDialog(),
     );
     if (result == true) {
-      ref.invalidate(expensesProvider);
-      ref.invalidate(expensesSummaryProvider);
+      invalidateAfterExpense(ref);
     }
   }
 }

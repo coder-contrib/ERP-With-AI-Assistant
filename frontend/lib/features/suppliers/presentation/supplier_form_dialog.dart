@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
 import '../data/suppliers_repository.dart';
 import 'suppliers_provider.dart';
 
@@ -64,7 +65,7 @@ class _SupplierFormDialogState extends ConsumerState<SupplierFormDialog> {
       } else {
         await repo.create(data);
       }
-      ref.invalidate(suppliersProvider);
+      invalidateAfterSupplierChange(ref);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
