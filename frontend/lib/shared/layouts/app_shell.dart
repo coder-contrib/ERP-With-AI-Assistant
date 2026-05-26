@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../features/notifications/presentation/notifications_provider.dart';
 
 final sidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
@@ -116,7 +117,16 @@ class AppShell extends ConsumerWidget {
                       const SizedBox(width: 4),
                       IconButton(onPressed: () => context.go('/ai'), icon: const Icon(Icons.smart_toy_rounded), tooltip: 'AI Assistant'),
                       const SizedBox(width: 8),
-                      IconButton(onPressed: () => context.go('/notifications'), icon: Badge(smallSize: 8, child: const Icon(Icons.notifications_outlined))),
+                      IconButton(
+                        onPressed: () => context.go('/notifications'),
+                        icon: ref.watch(unreadCountProvider).when(
+                          data: (count) => count > 0
+                              ? Badge(label: Text('$count', style: const TextStyle(fontSize: 10)), child: const Icon(Icons.notifications_outlined))
+                              : const Icon(Icons.notifications_outlined),
+                          loading: () => const Icon(Icons.notifications_outlined),
+                          error: (_, __) => const Icon(Icons.notifications_outlined),
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       IconButton(
                         onPressed: () {
