@@ -62,7 +62,9 @@ class AppShell extends ConsumerWidget {
                       _navItem(context, ref, '/opening-balances', Icons.account_balance_wallet_rounded, 'Opening Balances', collapsed),
                       _navItem(context, ref, '/reports', Icons.bar_chart_rounded, 'Reports', collapsed),
                       _navItem(context, ref, '/notifications', Icons.notifications_rounded, 'Notifications', collapsed),
-                      _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Assistant', collapsed),
+                      const Divider(height: 24),
+                      _navItem(context, ref, '/voice-ai', Icons.record_voice_over_rounded, 'Voice AI', collapsed, highlight: true),
+                      _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Chat', collapsed),
                     ],
                   ),
                 ),
@@ -106,6 +108,14 @@ class AppShell extends ConsumerWidget {
                         ),
                       ),
                       const Spacer(),
+                      // Voice AI button
+                      IconButton(
+                        onPressed: () => context.go('/voice-ai'),
+                        icon: const Icon(Icons.record_voice_over_rounded),
+                        tooltip: 'Voice AI',
+                        style: IconButton.styleFrom(foregroundColor: AppColors.primary),
+                      ),
+                      const SizedBox(width: 4),
                       // AI button
                       IconButton(
                         onPressed: () => context.go('/ai'),
@@ -147,7 +157,7 @@ class AppShell extends ConsumerWidget {
     );
   }
 
-  Widget _navItem(BuildContext context, WidgetRef ref, String path, IconData icon, String label, bool collapsed) {
+  Widget _navItem(BuildContext context, WidgetRef ref, String path, IconData icon, String label, bool collapsed, {bool highlight = false}) {
     final currentPath = GoRouterState.of(context).uri.path;
     final isActive = currentPath == path;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -164,8 +174,8 @@ class AppShell extends ConsumerWidget {
             padding: EdgeInsets.symmetric(horizontal: collapsed ? 16 : 12, vertical: 10),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: isActive ? AppColors.primary : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
-                if (!collapsed) ...[const SizedBox(width: 12), Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400, color: isActive ? AppColors.primary : null)))],
+                Icon(icon, size: 20, color: isActive ? AppColors.primary : highlight ? AppColors.primary.withOpacity(0.7) : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
+                if (!collapsed) ...[const SizedBox(width: 12), Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400, color: isActive ? AppColors.primary : highlight ? AppColors.primary.withOpacity(0.8) : null)))],
               ],
             ),
           ),
