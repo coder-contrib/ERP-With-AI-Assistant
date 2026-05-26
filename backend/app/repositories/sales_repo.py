@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.sales import SalesInvoice, SalesInvoiceItem
+from app.models.sales import SalesInvoice, SalesInvoiceItem, SalesReturn, SalesReturnItem
 
 
 class SalesRepository:
@@ -27,4 +27,26 @@ class SalesRepository:
     def get_items(self, invoice_id: int) -> list[SalesInvoiceItem]:
         return self.db.query(SalesInvoiceItem).filter(
             SalesInvoiceItem.invoice_id == invoice_id
+        ).all()
+
+    def create_return(self, **kwargs) -> SalesReturn:
+        ret = SalesReturn(**kwargs)
+        self.db.add(ret)
+        self.db.flush()
+        return ret
+
+    def create_return_item(self, **kwargs) -> SalesReturnItem:
+        item = SalesReturnItem(**kwargs)
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def get_returns_for_invoice(self, invoice_id: int) -> list[SalesReturn]:
+        return self.db.query(SalesReturn).filter(
+            SalesReturn.original_invoice_id == invoice_id
+        ).order_by(SalesReturn.return_date.desc()).all()
+
+    def get_return_items(self, return_id: int) -> list[SalesReturnItem]:
+        return self.db.query(SalesReturnItem).filter(
+            SalesReturnItem.return_id == return_id
         ).all()

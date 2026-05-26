@@ -28,6 +28,43 @@ class SalesInvoiceCreate(BaseModel):
     items: list[SalesItemCreate]
 
 
+class SalesReturnItemCreate(BaseModel):
+    product_id: int
+    returned_quantity: Decimal
+    unit_price: Decimal
+    total: Decimal
+
+
+class SalesReturnCreate(BaseModel):
+    refund_amount: Decimal = Decimal("0")
+    notes: str | None = None
+    items: list[SalesReturnItemCreate]
+
+
+class SalesReturnItemResponse(BaseModel):
+    item_id: int
+    product_id: int
+    returned_quantity: Decimal
+    unit_price: Decimal
+    total: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class SalesReturnResponse(BaseModel):
+    return_id: int
+    original_invoice_id: int
+    customer_id: int | None
+    return_date: datetime | None
+    returned_amount: Decimal
+    refund_amount: Decimal
+    notes: str | None
+
+    class Config:
+        from_attributes = True
+
+
 class SalesItemResponse(BaseModel):
     item_id: int
     product_id: int
