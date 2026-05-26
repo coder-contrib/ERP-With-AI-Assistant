@@ -443,17 +443,17 @@ class _AnalyticsDialog extends StatefulWidget {
 
 class _AnalyticsDialogState extends State<_AnalyticsDialog> {
   bool _loading = true;
-  Map<String, dynamic>? _forecast;
+  Map<String, dynamic>? _analytics;
   String? _error;
 
   @override
-  void initState() { super.initState(); _loadForecast(); }
+  void initState() { super.initState(); _loadAnalytics(); }
 
-  Future<void> _loadForecast() async {
+  Future<void> _loadAnalytics() async {
     try {
       final repo = widget.ref.read(productsRepositoryProvider);
-      final data = await repo.getDemandForecast(widget.product.productId);
-      if (mounted) setState(() { _forecast = data; _loading = false; });
+      final data = await repo.getAnalytics(widget.product.productId);
+      if (mounted) setState(() { _analytics = data; _loading = false; });
     } catch (e) { if (mounted) setState(() { _error = e.toString(); _loading = false; }); }
   }
 
@@ -461,26 +461,109 @@ class _AnalyticsDialogState extends State<_AnalyticsDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Row(children: [const Icon(Icons.analytics, color: AppColors.primary, size: 22), const SizedBox(width: 8), Expanded(child: Text('Analytics - ${widget.product.productName}', overflow: TextOverflow.ellipsis))]),
-      content: SizedBox(width: 400, child: _loading ? const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())) : _error != null ? Text('Unable to load forecast: $_error', style: const TextStyle(color: AppColors.error)) : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        const Text('AI Demand Forecast', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        const SizedBox(height: 12),
-        if (_forecast != null) ...[
-          if (_forecast!['predicted_demand'] != null) _forecastRow('Predicted Demand', '${_forecast!['predicted_demand']} units'),
-          if (_forecast!['confidence'] != null) _forecastRow('Confidence', '${((_forecast!['confidence'] as num) * 100).toStringAsFixed(0)}%'),
-          if (_forecast!['trend'] != null) _forecastRow('Trend', _forecast!['trend'].toString()),
-          if (_forecast!['recommendation'] != null) ...[
-            const SizedBox(height: 12),
-            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.primary.withOpacity(0.2))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Row(children: [Icon(Icons.lightbulb, size: 16, color: AppColors.primary), SizedBox(width: 6), Text('Recommendation', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.primary))]), const SizedBox(height: 6), Text(_forecast!['recommendation'].toString(), style: const TextStyle(fontSize: 13))])),
-          ],
-          if (_forecast!['response'] != null && _forecast!['predicted_demand'] == null) Text(_forecast!['response'].toString(), style: const TextStyle(fontSize: 13)),
-        ],
-      ]))),
+      content: SizedBox(
+        width: 420,
+        child: _loading
+            ? const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+            : _error != null
+                ? Text('Unable to load analytics: $_error', style: const TextStyle(color: AppColors.error))
+                : SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    // Summary Cards
+                    Row(children: [
+                      Expanded(child: _StatCard(label: 'Total Sold', value: '${_fmt(_analytics!['total_sold_quantity'])}', icon: Icons.shopping_cart, color: AppColors.primary)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _StatCard(label: 'Revenue', value: '\$${_fmt(_analytics!['total_revenue'])}', icon: Icons.attach_money, color: AppColors.success)),
+                    ]),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Expanded(child: _StatCard(label: 'Profit', value: '\$${_fmt(_analytics!['total_profit'])}', icon: Icons.trending_up, color: (_analytics!['total_profit'] ?? 0) >= 0 ? AppColors.success : AppColors.error)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _StatCard(label: 'Transactions', value: '${_analytics!['total_transactions'] ?? 0}', icon: Icons.receipt_long, color: AppColors.primary)),
+                    ]),
+
+                    const SizedBox(height: 20),
+                    const Text('Last 30 Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    _analyticsRow('Sold Quantity', _fmt((_analytics!['last_30_days'] as Map?)?['sold_quantity'])),
+                    _analyticsRow('Revenue', '\$${_fmt((_analytics!['last_30_days'] as Map?)?['revenue'])}'),
+                    _analyticsRow('Transactions', '${(_analytics!['last_30_days'] as Map?)?['transactions'] ?? 0}'),
+
+                    const SizedBox(height: 16),
+                    // Trend
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _trendColor(_analytics!['trend']).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _trendColor(_analytics!['trend']).withOpacity(0.3)),
+                      ),
+                      child: Row(children: [
+                        Icon(_trendIcon(_analytics!['trend']), color: _trendColor(_analytics!['trend']), size: 20),
+                        const SizedBox(width: 8),
+                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Trend: ${_analytics!['trend'] ?? 'N/A'}', style: TextStyle(fontWeight: FontWeight.w600, color: _trendColor(_analytics!['trend']))),
+                          Text('${_analytics!['trend_percentage'] ?? 0}% vs previous period', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        ]),
+                      ]),
+                    ),
+
+                    const SizedBox(height: 16),
+                    const Text('Purchase History', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    _analyticsRow('Total Purchased', _fmt(_analytics!['total_purchased_quantity'])),
+                    _analyticsRow('Total Cost', '\$${_fmt(_analytics!['total_purchase_cost'])}'),
+                    _analyticsRow('Avg Selling Price', '\$${_fmt(_analytics!['average_selling_price'])}'),
+                  ])),
+      ),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
     );
   }
 
-  Widget _forecastRow(String label, String value) {
-    return Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)), Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))]));
+  String _fmt(dynamic value) {
+    if (value == null) return '0';
+    final d = double.tryParse(value.toString()) ?? 0;
+    if (d == d.roundToDouble()) return d.toInt().toString();
+    return d.toStringAsFixed(2);
+  }
+
+  Color _trendColor(String? trend) {
+    switch (trend) {
+      case 'rising': return AppColors.success;
+      case 'declining': return AppColors.error;
+      default: return AppColors.warning;
+    }
+  }
+
+  IconData _trendIcon(String? trend) {
+    switch (trend) {
+      case 'rising': return Icons.trending_up;
+      case 'declining': return Icons.trending_down;
+      default: return Icons.trending_flat;
+    }
+  }
+
+  Widget _analyticsRow(String label, String value) {
+    return Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)), Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))]));
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _StatCard({required this.label, required this.value, required this.icon, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: color.withOpacity(0.06), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Icon(icon, size: 14, color: color), const SizedBox(width: 4), Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500))]),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color)),
+      ]),
+    );
   }
 }
 
