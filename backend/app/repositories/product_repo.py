@@ -28,6 +28,11 @@ class ProductRepository:
         self.db.flush()
         return product
 
+    def deactivate(self, product: Product) -> Product:
+        product.active_status = False
+        self.db.flush()
+        return product
+
     def get_conversions(self, product_id: int) -> list[ProductUnitConversion]:
         return self.db.query(ProductUnitConversion).filter(
             ProductUnitConversion.product_id == product_id
@@ -40,3 +45,12 @@ class ProductRepository:
         self.db.add(conversion)
         self.db.flush()
         return conversion
+
+    def get_conversion(self, conversion_id: int) -> ProductUnitConversion | None:
+        return self.db.query(ProductUnitConversion).filter(
+            ProductUnitConversion.conversion_id == conversion_id
+        ).first()
+
+    def delete_conversion(self, conversion: ProductUnitConversion) -> None:
+        self.db.delete(conversion)
+        self.db.flush()
