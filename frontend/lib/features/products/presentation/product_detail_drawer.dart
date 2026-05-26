@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/app_refresh.dart';
+import '../../../core/utils/print_helper.dart';
 import '../data/products_repository.dart';
 import 'products_provider.dart';
 
@@ -159,11 +161,137 @@ class _ProductDetailDrawerState extends ConsumerState<ProductDetailDrawer> with 
                     _ActionButton(icon: Icons.swap_horiz, label: 'Transfer to Warehouse', onTap: () => _transferStock(p, stockData)),
                     _ActionButton(icon: Icons.attach_money, label: 'Update Price', onTap: () => _updatePrice(p)),
                     _ActionButton(icon: Icons.analytics, label: 'View Analytics', onTap: () => _viewAnalytics(p)),
+                    _ActionButton(
+                      icon: p.activeStatus ? Icons.visibility_off : Icons.visibility,
+                      label: p.activeStatus ? 'Deactivate Product' : 'Activate Product',
+                      onTap: () => _toggleStatus(p),
+                    ),
+                    _ActionButton(icon: Icons.print, label: 'Print Barcode Label', onTap: () => _printBarcode(p)),
                     _ActionButton(icon: Icons.smart_toy, label: 'Ask AI about this product', onTap: () { _tabController.animateTo(2); }),
+                    const SizedBox(height: 16),
+                    _ActionButton(icon: Icons.delete, label: 'Delete Product', onTap: () => _deleteProduct(p), color: AppColors.error),
                   ]),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleStatus(ProductModel p) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(p.activeStatus ? 'Deactivate Product?' : 'Activate Product?'),
+        content: Text(p.activeStatus
+            ? 'This will hide "${p.productName}" from active listings. It can be reactivated later.'
+            : 'This will make "${p.productName}" visible in active listings again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: p.activeStatus ? AppColors.warning : AppColors.success),
+            child: Text(p.activeStatus ? 'Deactivate' : 'Activate'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final repo = ref.read(productsRepositoryProvider);
+      await repo.toggleStatus(p.productId);
+      invalidateAfterProductChange(ref);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Product ${p.activeStatus ? "deactivated" : "activated"} successfully')));
+        widget.onClose();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  void _deleteProduct(ProductModel p) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Product?'),
+        content: Text('Are you sure you want to delete "${p.productName}"? The product will be deactivated and hidden from all listings.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      final repo = ref.read(productsRepositoryProvider);
+      await repo.delete(p.productId);
+      invalidateAfterProductChange(ref);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product deleted successfully')));
+        widget.onClose();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  void _printBarcode(ProductModel p) {
+    final barcodeValue = p.barcode ?? 'PRD-${p.productId}';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [Icon(Icons.print, color: AppColors.primary, size: 22), SizedBox(width: 8), Text('Print Barcode Label')]),
+        content: SizedBox(
+          width: 350,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(children: [
+                Text(p.productName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(4)),
+                  child: Text(
+                    '||||| $barcodeValue |||||',
+                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 16, letterSpacing: 2),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(barcodeValue, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                const SizedBox(height: 8),
+                Text('Price: \$${p.sellingPrice}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            const Text('Click Print to generate a printable label', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              PrintHelper.printBarcode(
+                productName: p.productName,
+                barcode: barcodeValue,
+                price: p.sellingPrice,
+              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Barcode label sent to printer')));
+            },
+            icon: const Icon(Icons.print, size: 18),
+            label: const Text('Print'),
           ),
         ],
       ),
@@ -269,7 +397,7 @@ class _ProductDetailDrawerState extends ConsumerState<ProductDetailDrawer> with 
               final repo = ref.read(productsRepositoryProvider);
               await repo.update(p.productId, {'selling_price': newPrice, 'purchase_cost_per_meter': newCost});
               if (ctx.mounted) Navigator.pop(ctx);
-              ref.invalidate(filteredProductsProvider);
+              invalidateAfterProductChange(ref);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Price updated successfully')));
             } catch (e) { if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e'))); }
           }, child: const Text('Save')),
@@ -356,9 +484,11 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _ActionButton({required this.icon, required this.label, required this.onTap});
+  final Color? color;
+  const _ActionButton({required this.icon, required this.label, required this.onTap, this.color});
   @override
   Widget build(BuildContext context) {
-    return Padding(padding: const EdgeInsets.only(bottom: 8), child: ListTile(leading: Icon(icon, color: AppColors.primary), title: Text(label, style: const TextStyle(fontSize: 14)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)), onTap: onTap));
+    final c = color ?? AppColors.primary;
+    return Padding(padding: const EdgeInsets.only(bottom: 8), child: ListTile(leading: Icon(icon, color: c), title: Text(label, style: TextStyle(fontSize: 14, color: color != null ? color : null)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: color != null ? color!.withOpacity(0.3) : AppColors.border)), onTap: onTap));
   }
 }
