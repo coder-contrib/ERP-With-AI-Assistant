@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480
     anthropic_api_key: str = ""
     ai_model: str = "claude-sonnet-4-20250514"
+    openai_api_key: str = ""
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     debug: bool = False
     allowed_origins: str = "http://localhost:3000,http://localhost:5173"
 
