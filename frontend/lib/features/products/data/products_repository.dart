@@ -150,6 +150,16 @@ class ProductsRepository {
     return ProductModel.fromJson(response.data);
   }
 
+  Future<ProductModel> delete(int id) async {
+    final response = await _dio.delete('/products/$id');
+    return ProductModel.fromJson(response.data);
+  }
+
+  Future<ProductModel> toggleStatus(int id) async {
+    final response = await _dio.post('/products/$id/toggle-status');
+    return ProductModel.fromJson(response.data);
+  }
+
   Future<List<UnitConversionModel>> getConversions(int productId) async {
     final response = await _dio.get('/products/$productId/conversions');
     return (response.data as List).map((e) => UnitConversionModel.fromJson(e)).toList();
