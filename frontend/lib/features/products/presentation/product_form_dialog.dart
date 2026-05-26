@@ -31,6 +31,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   bool _isLoading = false;
 
   final List<_ConversionEntry> _conversions = [];
+  final List<int> _deletedConversionIds = [];
 
   bool get isEditing => widget.product != null;
 
@@ -99,6 +100,10 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   }
 
   void _removeConversion(int index) {
+    final conv = _conversions[index];
+    if (conv.id != null) {
+      _deletedConversionIds.add(conv.id!);
+    }
     setState(() {
       _conversions[index].factorController.dispose();
       _conversions.removeAt(index);
@@ -133,7 +138,14 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
         result = await repo.create(data);
       }
 
-      // Save unit conversions
+      // Delete removed conversions from backend
+      for (final convId in _deletedConversionIds) {
+        try {
+          await repo.deleteConversion(result.productId, convId);
+        } catch (_) {}
+      }
+
+      // Save new unit conversions
       for (final conv in _conversions) {
         if (conv.id == null && conv.factorController.text.isNotEmpty) {
           await repo.addConversion(result.productId, {
