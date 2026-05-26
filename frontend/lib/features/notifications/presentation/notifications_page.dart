@@ -98,18 +98,14 @@ class NotificationsPage extends ConsumerWidget {
 
   Future<void> _markRead(WidgetRef ref, int notificationId) async {
     final repo = ref.read(notificationsRepositoryProvider);
-    try {
-      await repo.markAsRead(notificationId);
-    } catch (_) {}
+    await repo.markAsRead(notificationId);
     ref.invalidate(notificationsProvider);
     ref.invalidate(unreadCountProvider);
   }
 
   Future<void> _markAllRead(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(notificationsRepositoryProvider);
-    try {
-      await repo.markAllAsRead();
-    } catch (_) {}
+    await repo.markAllAsRead();
     ref.invalidate(notificationsProvider);
     ref.invalidate(unreadCountProvider);
     if (context.mounted) {
@@ -130,7 +126,7 @@ class NotificationsPage extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backend offline — showing demo data'), duration: Duration(seconds: 2)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
       }
     }
   }
