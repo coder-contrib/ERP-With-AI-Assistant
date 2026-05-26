@@ -32,3 +32,29 @@ class PurchaseInvoiceResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PurchaseReturnItemCreate(BaseModel):
+    product_id: int
+    returned_quantity: Decimal
+    unit_cost: Decimal
+    total: Decimal
+
+
+class PurchaseReturnCreate(BaseModel):
+    items: list[PurchaseReturnItemCreate]
+    warehouse_id: int = 1
+    refund_amount: Decimal = Decimal("0")
+    notes: str | None = None
+
+
+class PurchaseReturnResponse(BaseModel):
+    return_id: int
+    original_purchase_invoice_id: int
+    supplier_id: int
+    returned_amount: Decimal
+    return_date: datetime | None
+    notes: str | None
+
+    class Config:
+        from_attributes = True
