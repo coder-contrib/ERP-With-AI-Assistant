@@ -433,7 +433,8 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
             _actionTile(Icons.payment, 'Record Payment', 'Add a payment to this invoice', AppColors.success, () => _recordPayment(inv)),
           _actionTile(Icons.print, 'Print Invoice', 'Generate PDF invoice', AppColors.info, () => _printInvoice(inv)),
           _actionTile(Icons.edit, 'Edit Invoice', 'Modify invoice details', AppColors.warning, () => _editInvoice(inv)),
-          _actionTile(Icons.undo, 'Return / Cancel', 'Process return or cancel invoice', AppColors.error, () => _cancelInvoice(inv)),
+          _actionTile(Icons.assignment_return, 'Return Items', 'Return specific products from this invoice', AppColors.warning, () => _returnItems(inv)),
+          _actionTile(Icons.cancel, 'Cancel Invoice', 'Cancel entire invoice', AppColors.error, () => _cancelInvoice(inv)),
           const Divider(height: 32),
           _sectionTitle('AI Actions'),
           const SizedBox(height: 12),
@@ -664,6 +665,43 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
     );
   }
 
+  void _returnItems(SalesInvoiceModel inv) {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No items loaded yet. Please wait.')));
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _ReturnItemsDialog(
+        items: _items,
+        invoice: inv,
+        onSubmit: (returnItems, refundAmount, notes) async {
+          try {
+            final repo = ref.read(salesRepositoryProvider);
+            await repo.createReturn(
+              inv.invoiceId,
+              items: returnItems,
+              refundAmount: refundAmount,
+              notes: notes,
+            );
+            if (ctx.mounted) Navigator.pop(ctx);
+            widget.onPaymentRecorded();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Return processed successfully')),
+              );
+            }
+          } catch (e) {
+            if (ctx.mounted) {
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+            }
+          }
+        },
+      ),
+    );
+  }
+
   void _cancelInvoice(SalesInvoiceModel inv) {
     final reasonController = TextEditingController();
 
@@ -831,5 +869,238 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
     } catch (_) {
       return dateStr;
     }
+  }
+}
+
+
+class _ReturnItemsDialog extends StatefulWidget {
+  final List<InvoiceItemModel> items;
+  final SalesInvoiceModel invoice;
+  final Future<void> Function(List<Map<String, dynamic>> returnItems, double refundAmount, String? notes) onSubmit;
+
+  const _ReturnItemsDialog({required this.items, required this.invoice, required this.onSubmit});
+
+  @override
+  State<_ReturnItemsDialog> createState() => _ReturnItemsDialogState();
+}
+
+class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
+  late final List<TextEditingController> _qtyControllers;
+  late final List<bool> _selected;
+  final _notesController = TextEditingController();
+  bool _refundCash = true;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _qtyControllers = widget.items.map((item) => TextEditingController(text: '0')).toList();
+    _selected = List.filled(widget.items.length, false);
+  }
+
+  @override
+  void dispose() {
+    for (final c in _qtyControllers) {
+      c.dispose();
+    }
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  double get _returnTotal {
+    double total = 0;
+    for (int i = 0; i < widget.items.length; i++) {
+      if (_selected[i]) {
+        final qty = double.tryParse(_qtyControllers[i].text) ?? 0;
+        total += qty * widget.items[i].unitPrice;
+      }
+    }
+    return total;
+  }
+
+  Future<void> _submit() async {
+    final returnItems = <Map<String, dynamic>>[];
+    for (int i = 0; i < widget.items.length; i++) {
+      if (!_selected[i]) continue;
+      final qty = double.tryParse(_qtyControllers[i].text) ?? 0;
+      if (qty <= 0) continue;
+      if (qty > widget.items[i].soldQuantity) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${widget.items[i].productName}: return qty exceeds sold qty')),
+        );
+        return;
+      }
+      final total = qty * widget.items[i].unitPrice;
+      returnItems.add({
+        'product_id': widget.items[i].productId,
+        'returned_quantity': qty,
+        'unit_price': widget.items[i].unitPrice,
+        'total': total,
+      });
+    }
+
+    if (returnItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one item to return')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final refund = _refundCash ? _returnTotal : 0.0;
+    final notes = _notesController.text.trim().isEmpty ? null : _notesController.text.trim();
+    await widget.onSubmit(returnItems, refund, notes);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 550,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.05),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.assignment_return, color: AppColors.warning),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Return Items', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                        Text(widget.invoice.invoiceNumber, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select items to return:', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    ...widget.items.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final item = entry.value;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _selected[i] ? AppColors.warning : Colors.grey.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(8),
+                          color: _selected[i] ? AppColors.warning.withOpacity(0.03) : null,
+                        ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _selected[i],
+                              onChanged: (v) => setState(() => _selected[i] = v ?? false),
+                              activeColor: AppColors.warning,
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.productName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                                  Text('Sold: ${item.soldQuantity} ${item.unitType} @ ${item.unitPrice.toStringAsFixed(0)} EGP', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                ],
+                              ),
+                            ),
+                            if (_selected[i])
+                              SizedBox(
+                                width: 80,
+                                child: TextField(
+                                  controller: _qtyControllers[i],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Qty',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    suffixText: item.unitType,
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      title: const Text('Refund cash to customer', style: TextStyle(fontSize: 14)),
+                      subtitle: Text(_refundCash ? 'Cash refund: ${_returnTotal.toStringAsFixed(0)} EGP' : 'Credit balance adjustment only'),
+                      value: _refundCash,
+                      onChanged: (v) => setState(() => _refundCash = v),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: AppColors.success,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _notesController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes (optional)',
+                        hintText: 'Reason for return...',
+                        prefixIcon: Icon(Icons.notes),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Return Total:', style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text('${_returnTotal.toStringAsFixed(0)} EGP', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: _isLoading ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _submit,
+                    icon: _isLoading
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.assignment_return),
+                    label: const Text('Process Return'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning, foregroundColor: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
