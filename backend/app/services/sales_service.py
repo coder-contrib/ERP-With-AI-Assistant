@@ -37,7 +37,6 @@ class SalesService:
 
     def create_invoice(self, data: SalesInvoiceCreate) -> SalesInvoice:
         with transaction(self.db):
-            # --- VALIDATION ---
             if data.invoice_type in ("credit", "mixed") and not data.customer_id:
                 raise ValidationError("Credit and mixed invoices require a customer")
 
@@ -52,7 +51,6 @@ class SalesService:
                 self.validator.validate_unit_type_for_product(item_data.product_id, item_data.unit_type)
                 self.validator.validate_stock_available(item_data.product_id, data.warehouse_id, item_data.sold_quantity)
 
-            # --- EXECUTION ---
             remaining = total_amount - data.discount_amount - data.paid_amount
             payment_status = self._calc_payment_status(data.paid_amount, remaining)
 
@@ -103,7 +101,6 @@ class SalesService:
                 customer = self.customer_repo.get_by_id(data.customer_id)
                 self.customer_repo.update_balance(customer, remaining)
 
-        # --- PUBLISH EVENT (after commit) ---
         self.db.refresh(invoice)
         self.event_bus.publish(Event(
             event_type=SALE_CREATED,
