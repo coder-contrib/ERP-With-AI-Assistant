@@ -98,3 +98,23 @@ class LedgerService:
         # Credit: Cash
         self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=amount,
                     entity_type="expense", entity_id=expense_id, description=f"Cash out: {category}")
+
+    def record_sales_return(self, return_id: int, returned_amount: Decimal,
+                            refund_amount: Decimal, cogs: Decimal):
+        # Debit: Sales Returns (contra-revenue)
+        self._entry(ACCOUNT_CODES["sales_returns"], debit=returned_amount, credit=Decimal("0"),
+                    entity_type="sales_return", entity_id=return_id, description="Sales return")
+        # Credit: Cash or Accounts Receivable (refund)
+        if refund_amount > 0:
+            self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=refund_amount,
+                        entity_type="sales_return", entity_id=return_id, description="Cash refund for return")
+        credit_portion = returned_amount - refund_amount
+        if credit_portion > 0:
+            self._entry(ACCOUNT_CODES["accounts_receivable"], debit=Decimal("0"), credit=credit_portion,
+                        entity_type="sales_return", entity_id=return_id, description="Receivable reduced by return")
+        # Debit: Inventory (goods back in)
+        self._entry(ACCOUNT_CODES["inventory"], debit=cogs, credit=Decimal("0"),
+                    entity_type="sales_return", entity_id=return_id, description="Inventory restored from return")
+        # Credit: COGS (reverse)
+        self._entry(ACCOUNT_CODES["cogs"], debit=Decimal("0"), credit=cogs,
+                    entity_type="sales_return", entity_id=return_id, description="COGS reversal for return")

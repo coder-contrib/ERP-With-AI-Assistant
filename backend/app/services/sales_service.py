@@ -9,10 +9,10 @@ from app.services.cash_service import CashService
 from app.services.ledger_service import LedgerService
 from app.core.validators import Validator
 from app.events.event_bus import Event, get_event_bus
-from app.events.sale_events import SALE_CREATED, SaleCreatedData
-from app.schemas.sales import SalesInvoiceCreate
-from app.models.sales import SalesInvoice
+from app.events.sale_events import SALE_CREATED, SALE_RETURNED, SaleCreatedData
 from app.core.exceptions import NotFoundError, ValidationError
+from app.schemas.sales import SalesInvoiceCreate, SalesReturnCreate
+from app.models.sales import SalesInvoice, SalesReturn
 
 
 class SalesService:
@@ -128,3 +128,96 @@ class SalesService:
         if paid > 0:
             return "partial"
         return "unpaid"
+
+    def process_return(self, invoice_id: int, data: SalesReturnCreate) -> SalesReturn:
+        with transaction(self.db):
+            invoice = self.repo.get_by_id(invoice_id)
+            if not invoice:
+                raise NotFoundError("Sales invoice not found")
+
+            if not data.items:
+                raise ValidationError("At least one item is required for a return")
+
+            invoice_items = self.repo.get_items(invoice_id)
+            item_map = {item.product_id: item for item in invoice_items}
+
+            for ret_item in data.items:
+                orig = item_map.get(ret_item.product_id)
+                if not orig:
+                    raise ValidationError(f"Product {ret_item.product_id} not found in this invoice")
+                if ret_item.returned_quantity > orig.sold_quantity:
+                    raise ValidationError(
+                        f"Return quantity ({ret_item.returned_quantity}) exceeds sold quantity ({orig.sold_quantity})"
+                    )
+
+            returned_amount = sum(item.total for item in data.items)
+            refund_amount = min(data.refund_amount, returned_amount)
+
+            sales_return = self.repo.create_return(
+                original_invoice_id=invoice_id,
+                customer_id=invoice.customer_id,
+                returned_amount=returned_amount,
+                refund_amount=refund_amount,
+                notes=data.notes,
+            )
+
+            cogs_total = Decimal("0")
+            for ret_item in data.items:
+                self.repo.create_return_item(
+                    return_id=sales_return.return_id,
+                    product_id=ret_item.product_id,
+                    returned_quantity=ret_item.returned_quantity,
+                    unit_price=ret_item.unit_price,
+                    total=ret_item.total,
+                )
+                orig = item_map[ret_item.product_id]
+                cogs_total += ret_item.returned_quantity * orig.cost_at_sale
+
+                self.inventory.record_return(
+                    product_id=ret_item.product_id,
+                    warehouse_id=invoice.warehouse_id,
+                    quantity=ret_item.returned_quantity,
+                    unit_type=orig.unit_type,
+                    cost_per_unit=orig.cost_at_sale,
+                    reference_id=sales_return.return_id,
+                )
+
+            if refund_amount > 0:
+                self.cash.record_cash_out(
+                    amount=refund_amount,
+                    entity_type="sales_return",
+                    entity_id=sales_return.return_id,
+                )
+
+            self.ledger.record_sales_return(
+                return_id=sales_return.return_id,
+                returned_amount=returned_amount,
+                refund_amount=refund_amount,
+                cogs=cogs_total,
+            )
+
+            if invoice.customer_id and invoice.invoice_type in ("credit", "mixed"):
+                credit_reduction = returned_amount - refund_amount
+                if credit_reduction > 0:
+                    customer = self.customer_repo.get_by_id(invoice.customer_id)
+                    self.customer_repo.update_balance(customer, -credit_reduction)
+
+            invoice.total_amount -= returned_amount
+            invoice.remaining_amount = max(invoice.remaining_amount - (returned_amount - refund_amount), Decimal("0"))
+            invoice.paid_amount = max(invoice.paid_amount - refund_amount, Decimal("0"))
+            invoice.payment_status = self._calc_payment_status(invoice.paid_amount, invoice.remaining_amount)
+            self.db.flush()
+
+        self.db.refresh(sales_return)
+        self.event_bus.publish(Event(
+            event_type=SALE_RETURNED,
+            data={
+                "return_id": sales_return.return_id,
+                "original_invoice_id": invoice_id,
+                "customer_id": invoice.customer_id,
+                "returned_amount": str(returned_amount),
+                "refund_amount": str(refund_amount),
+                "items": [item.model_dump() for item in data.items],
+            },
+        ))
+        return sales_return

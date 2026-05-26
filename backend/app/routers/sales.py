@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas.sales import SalesInvoiceCreate, SalesInvoiceResponse
+from app.schemas.sales import SalesInvoiceCreate, SalesInvoiceResponse, SalesReturnCreate, SalesReturnResponse
 from app.services.sales_service import SalesService
 from app.core.deps import require_permission
 from app.models.users import User
@@ -98,3 +98,15 @@ def get_invoice_payments(invoice_id: int, current_user: User = Depends(require_p
 def create_sale(data: SalesInvoiceCreate, current_user: User = Depends(require_permission("sales:write")), db: Session = Depends(get_db)):
     service = SalesService(db)
     return service.create_invoice(data)
+
+
+@router.post("/{invoice_id}/returns", response_model=SalesReturnResponse, status_code=201)
+def create_return(invoice_id: int, data: SalesReturnCreate, current_user: User = Depends(require_permission("sales:write")), db: Session = Depends(get_db)):
+    service = SalesService(db)
+    return service.process_return(invoice_id, data)
+
+
+@router.get("/{invoice_id}/returns", response_model=list[SalesReturnResponse])
+def get_returns(invoice_id: int, current_user: User = Depends(require_permission("sales:read")), db: Session = Depends(get_db)):
+    service = SalesService(db)
+    return service.repo.get_returns_for_invoice(invoice_id)
