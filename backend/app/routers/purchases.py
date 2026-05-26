@@ -69,45 +69,74 @@ def get_purchase_items(
     current_user: User = Depends(require_permission("purchases:read")),
     db: Session = Depends(get_db),
 ):
-    returned_subq = (
-        db.query(
-            PurchaseReturnItem.product_id,
-            func.coalesce(func.sum(PurchaseReturnItem.returned_quantity), 0).label("returned_qty"),
+    try:
+        returned_subq = (
+            db.query(
+                PurchaseReturnItem.product_id,
+                func.coalesce(func.sum(PurchaseReturnItem.returned_quantity), 0).label("returned_qty"),
+            )
+            .join(PurchaseReturn, PurchaseReturn.return_id == PurchaseReturnItem.return_id)
+            .filter(PurchaseReturn.original_purchase_invoice_id == purchase_invoice_id)
+            .group_by(PurchaseReturnItem.product_id)
+            .subquery()
         )
-        .join(PurchaseReturn, PurchaseReturn.return_id == PurchaseReturnItem.return_id)
-        .filter(PurchaseReturn.original_purchase_invoice_id == purchase_invoice_id)
-        .group_by(PurchaseReturnItem.product_id)
-        .subquery()
-    )
 
-    rows = (
-        db.query(
-            PurchaseInvoiceItem.item_id,
-            PurchaseInvoiceItem.product_id,
-            Product.product_name,
-            PurchaseInvoiceItem.purchased_quantity,
-            PurchaseInvoiceItem.purchase_price,
-            PurchaseInvoiceItem.total_cost,
-            func.coalesce(returned_subq.c.returned_qty, 0).label("returned_quantity"),
+        rows = (
+            db.query(
+                PurchaseInvoiceItem.item_id,
+                PurchaseInvoiceItem.product_id,
+                Product.product_name,
+                PurchaseInvoiceItem.purchased_quantity,
+                PurchaseInvoiceItem.purchase_price,
+                PurchaseInvoiceItem.total_cost,
+                func.coalesce(returned_subq.c.returned_qty, 0).label("returned_quantity"),
+            )
+            .join(Product, Product.product_id == PurchaseInvoiceItem.product_id)
+            .outerjoin(returned_subq, returned_subq.c.product_id == PurchaseInvoiceItem.product_id)
+            .filter(PurchaseInvoiceItem.purchase_invoice_id == purchase_invoice_id)
+            .all()
         )
-        .join(Product, Product.product_id == PurchaseInvoiceItem.product_id)
-        .outerjoin(returned_subq, returned_subq.c.product_id == PurchaseInvoiceItem.product_id)
-        .filter(PurchaseInvoiceItem.purchase_invoice_id == purchase_invoice_id)
-        .all()
-    )
 
-    return [
-        PurchaseItemResponse(
-            item_id=r.item_id,
-            product_id=r.product_id,
-            product_name=r.product_name,
-            purchased_quantity=r.purchased_quantity,
-            purchase_price=r.purchase_price,
-            total_cost=r.total_cost,
-            returned_quantity=r.returned_quantity,
+        return [
+            PurchaseItemResponse(
+                item_id=r.item_id,
+                product_id=r.product_id,
+                product_name=r.product_name,
+                purchased_quantity=r.purchased_quantity,
+                purchase_price=r.purchase_price,
+                total_cost=r.total_cost,
+                returned_quantity=r.returned_quantity,
+            )
+            for r in rows
+        ]
+    except Exception:
+        db.rollback()
+        rows = (
+            db.query(
+                PurchaseInvoiceItem.item_id,
+                PurchaseInvoiceItem.product_id,
+                Product.product_name,
+                PurchaseInvoiceItem.purchased_quantity,
+                PurchaseInvoiceItem.purchase_price,
+                PurchaseInvoiceItem.total_cost,
+            )
+            .join(Product, Product.product_id == PurchaseInvoiceItem.product_id)
+            .filter(PurchaseInvoiceItem.purchase_invoice_id == purchase_invoice_id)
+            .all()
         )
-        for r in rows
-    ]
+
+        return [
+            PurchaseItemResponse(
+                item_id=r.item_id,
+                product_id=r.product_id,
+                product_name=r.product_name,
+                purchased_quantity=r.purchased_quantity,
+                purchase_price=r.purchase_price,
+                total_cost=r.total_cost,
+                returned_quantity=Decimal("0"),
+            )
+            for r in rows
+        ]
 
 
 @router.get("/{purchase_invoice_id}/payments", response_model=list[PurchasePaymentResponse])
