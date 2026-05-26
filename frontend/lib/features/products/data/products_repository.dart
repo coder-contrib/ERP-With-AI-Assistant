@@ -160,6 +160,11 @@ class ProductsRepository {
     return ProductModel.fromJson(response.data);
   }
 
+  Future<Map<String, dynamic>> getAnalytics(int productId) async {
+    final response = await _dio.get('/products/$productId/analytics');
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<List<UnitConversionModel>> getConversions(int productId) async {
     final response = await _dio.get('/products/$productId/conversions');
     return (response.data as List).map((e) => UnitConversionModel.fromJson(e)).toList();
