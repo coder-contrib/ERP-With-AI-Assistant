@@ -6,6 +6,11 @@ final productsRepositoryProvider = Provider<ProductsRepository>((ref) {
   return ProductsRepository(ref.read(dioProvider));
 });
 
+final productsListProvider = FutureProvider<List<ProductModel>>((ref) async {
+  final repo = ref.read(productsRepositoryProvider);
+  return repo.getAll(activeOnly: true);
+});
+
 class ProductModel {
   final int productId;
   final String productName;
