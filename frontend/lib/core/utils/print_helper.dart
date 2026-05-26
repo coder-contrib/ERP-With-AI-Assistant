@@ -1,5 +1,50 @@
 import 'dart:html' as html;
 
+class PrintHelper {
+  static void printBarcode({
+    required String productName,
+    required String barcode,
+    required String price,
+  }) {
+    final content = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Barcode - $productName</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .label { border: 2px dashed #ccc; padding: 20px 30px; text-align: center; width: 300px; }
+    .product-name { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+    .barcode { font-family: 'Libre Barcode 128', monospace; font-size: 48px; letter-spacing: 2px; margin: 10px 0; }
+    .barcode-text { font-family: monospace; font-size: 12px; color: #333; margin-bottom: 8px; }
+    .price { font-size: 16px; font-weight: 700; }
+    @media print {
+      body { margin: 0; }
+      .label { border: none; }
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Barcode+128&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="label">
+    <div class="product-name">$productName</div>
+    <div class="barcode">$barcode</div>
+    <div class="barcode-text">$barcode</div>
+    <div class="price">EGP $price</div>
+  </div>
+  <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); }</script>
+</body>
+</html>
+''';
+
+    final blob = html.Blob([content], 'text/html');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.window.open(url, '_blank');
+  }
+}
+
 void printReportHtml({required String title, required String tableHtml}) {
   final now = DateTime.now();
   final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
