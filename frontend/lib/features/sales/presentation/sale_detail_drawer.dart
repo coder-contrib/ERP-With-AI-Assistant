@@ -30,6 +30,7 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
   bool _paymentsLoading = false;
   List<InvoiceItemModel> _items = [];
   bool _itemsLoading = false;
+  List<SalesReturnModel> _returns = [];
 
   @override
   void initState() {
@@ -64,11 +65,13 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
       final results = await Future.wait([
         repo.getInvoicePayments(widget.invoice.invoiceId),
         repo.getInvoiceItems(widget.invoice.invoiceId),
+        repo.getReturns(widget.invoice.invoiceId),
       ]);
       if (mounted) {
         setState(() {
           _payments = results[0] as List<InvoicePaymentModel>;
           _items = results[1] as List<InvoiceItemModel>;
+          _returns = results[2] as List<SalesReturnModel>;
         });
       }
     } catch (_) {}
@@ -506,11 +509,14 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
     if (_items.isNotEmpty) {
       tableHtml += buildTableHtml(
         sectionTitle: 'Products',
-        headers: ['#', 'Product', 'Qty', 'Unit', 'Price', 'Discount', 'Total'],
+        headers: ['#', 'Product', 'Qty', 'Unit', 'Price', 'Discount', 'Returned', 'Total'],
         rows: _items.asMap().entries.map((entry) {
           final i = entry.key + 1;
           final item = entry.value;
           final qty = item.soldQuantity % 1 == 0 ? '${item.soldQuantity.toInt()}' : item.soldQuantity.toStringAsFixed(2);
+          final retQty = item.returnedQuantity > 0
+              ? (item.returnedQuantity % 1 == 0 ? '${item.returnedQuantity.toInt()}' : item.returnedQuantity.toStringAsFixed(2))
+              : '—';
           return [
             '$i',
             item.productName,
@@ -518,6 +524,7 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
             item.unitType,
             item.unitPrice.toStringAsFixed(2),
             item.discount.toStringAsFixed(2),
+            retQty,
             item.totalPrice.toStringAsFixed(2),
           ];
         }).toList(),
@@ -544,6 +551,47 @@ class _SaleDetailDrawerState extends ConsumerState<SaleDetailDrawer> with Single
           final p = entry.value;
           final pDate = p.paymentDate != null ? _formatDate(p.paymentDate!) : 'N/A';
           return ['$i', p.amount.toStringAsFixed(2), pDate, p.notes ?? '—'];
+        }).toList(),
+      );
+    }
+
+    if (_returns.isNotEmpty) {
+      tableHtml += buildTableHtml(
+        sectionTitle: 'Return Operations',
+        headers: ['#', 'Date', 'Returned Amount (EGP)', 'Refund (EGP)', 'Notes'],
+        rows: _returns.asMap().entries.map((entry) {
+          final i = entry.key + 1;
+          final r = entry.value;
+          final rDate = r.returnDate != null ? _formatDate(r.returnDate!) : 'N/A';
+          return [
+            '$i',
+            rDate,
+            r.returnedAmount.toStringAsFixed(2),
+            r.refundAmount.toStringAsFixed(2),
+            r.notes ?? '—',
+          ];
+        }).toList(),
+      );
+    }
+
+    // Operations Timeline
+    final operations = <Map<String, String>>[];
+    operations.add({'type': 'Invoice Created', 'date': inv.invoiceDate != null ? _formatDate(inv.invoiceDate!) : 'N/A', 'details': 'Total: ${inv.total.toStringAsFixed(2)} EGP — ${inv.invoiceType.toUpperCase()}'});
+    for (final p in _payments) {
+      operations.add({'type': 'Payment Received', 'date': p.paymentDate != null ? _formatDate(p.paymentDate!) : 'N/A', 'details': '${p.amount.toStringAsFixed(2)} EGP${p.notes != null && p.notes!.isNotEmpty ? " — ${p.notes}" : ""}'});
+    }
+    for (final r in _returns) {
+      operations.add({'type': 'Return Processed', 'date': r.returnDate != null ? _formatDate(r.returnDate!) : 'N/A', 'details': 'Returned: ${r.returnedAmount.toStringAsFixed(2)} EGP, Refund: ${r.refundAmount.toStringAsFixed(2)} EGP${r.notes != null && r.notes!.isNotEmpty ? " — ${r.notes}" : ""}'});
+    }
+
+    if (operations.length > 1) {
+      tableHtml += buildTableHtml(
+        sectionTitle: 'Operations History',
+        headers: ['#', 'Operation', 'Date', 'Details'],
+        rows: operations.asMap().entries.map((entry) {
+          final i = entry.key + 1;
+          final op = entry.value;
+          return ['$i', op['type']!, op['date']!, op['details']!];
         }).toList(),
       );
     }
