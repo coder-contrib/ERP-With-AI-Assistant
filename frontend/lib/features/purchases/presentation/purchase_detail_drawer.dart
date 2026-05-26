@@ -61,20 +61,23 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
       _itemsLoading = true;
     });
     final repo = ref.read(purchasesRepositoryProvider);
+
+    // Load each independently so one failure doesn't block the others
     try {
-      final results = await Future.wait([
-        repo.getPayments(widget.invoice.purchaseInvoiceId),
-        repo.getItems(widget.invoice.purchaseInvoiceId),
-        repo.getReturns(widget.invoice.purchaseInvoiceId),
-      ]);
-      if (mounted) {
-        setState(() {
-          _payments = results[0] as List<PurchasePaymentModel>;
-          _items = results[1] as List<PurchaseItemDetailModel>;
-          _returns = results[2] as List<PurchaseReturnModel>;
-        });
-      }
+      final items = await repo.getItems(widget.invoice.purchaseInvoiceId);
+      if (mounted) setState(() => _items = items);
     } catch (_) {}
+
+    try {
+      final payments = await repo.getPayments(widget.invoice.purchaseInvoiceId);
+      if (mounted) setState(() => _payments = payments);
+    } catch (_) {}
+
+    try {
+      final returns = await repo.getReturns(widget.invoice.purchaseInvoiceId);
+      if (mounted) setState(() => _returns = returns);
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _paymentsLoading = false;
@@ -258,7 +261,7 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.purchasedQuantity % 1 == 0 ? item.purchasedQuantity.toInt() : item.purchasedQuantity.toStringAsFixed(2)} × ${item.purchasePrice.toStringAsFixed(2)} IQD',
+                      '${item.purchasedQuantity % 1 == 0 ? item.purchasedQuantity.toInt() : item.purchasedQuantity.toStringAsFixed(2)} x ${item.purchasePrice.toStringAsFixed(2)} IQD',
                       style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
                     ),
                     if (item.returnedQuantity > 0)
@@ -558,7 +561,7 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
           final qty = item.purchasedQuantity % 1 == 0 ? '${item.purchasedQuantity.toInt()}' : item.purchasedQuantity.toStringAsFixed(2);
           final retQty = item.returnedQuantity > 0
               ? (item.returnedQuantity % 1 == 0 ? '${item.returnedQuantity.toInt()}' : item.returnedQuantity.toStringAsFixed(2))
-              : '—';
+              : '-';
           return [
             '$i',
             item.productName,
@@ -589,7 +592,7 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
           final i = entry.key + 1;
           final p = entry.value;
           final pDate = p.paymentDate != null ? _formatDate(p.paymentDate!) : 'N/A';
-          return ['$i', p.amount.toStringAsFixed(2), pDate, p.notes ?? '—'];
+          return ['$i', p.amount.toStringAsFixed(2), pDate, p.notes ?? '-'];
         }).toList(),
       );
     }
@@ -606,7 +609,7 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
             '$i',
             rDate,
             r.returnedAmount.toStringAsFixed(2),
-            r.notes ?? '—',
+            r.notes ?? '-',
           ];
         }).toList(),
       );
@@ -686,7 +689,7 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Record Payment — ${invoice.invoiceNumber}'),
+        title: Text('Record Payment - ${invoice.invoiceNumber}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
