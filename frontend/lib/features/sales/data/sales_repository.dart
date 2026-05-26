@@ -154,6 +154,38 @@ class SalesItemModel {
   }
 }
 
+class SalesReturnModel {
+  final int returnId;
+  final int originalInvoiceId;
+  final int? customerId;
+  final String? returnDate;
+  final double returnedAmount;
+  final double refundAmount;
+  final String? notes;
+
+  SalesReturnModel({
+    required this.returnId,
+    required this.originalInvoiceId,
+    this.customerId,
+    this.returnDate,
+    required this.returnedAmount,
+    required this.refundAmount,
+    this.notes,
+  });
+
+  factory SalesReturnModel.fromJson(Map<String, dynamic> json) {
+    return SalesReturnModel(
+      returnId: json['return_id'],
+      originalInvoiceId: json['original_invoice_id'],
+      customerId: json['customer_id'],
+      returnDate: json['return_date'],
+      returnedAmount: double.tryParse(json['returned_amount']?.toString() ?? '0') ?? 0,
+      refundAmount: double.tryParse(json['refund_amount']?.toString() ?? '0') ?? 0,
+      notes: json['notes'],
+    );
+  }
+}
+
 class SalesRepository {
   final Dio _dio;
   SalesRepository(this._dio);
@@ -201,6 +233,20 @@ class SalesRepository {
       'payment_amount': amount,
       'notes': notes,
     });
+  }
+
+  Future<SalesReturnModel> createReturn(int invoiceId, {required List<Map<String, dynamic>> items, double refundAmount = 0, String? notes}) async {
+    final response = await _dio.post('/sales/$invoiceId/returns', data: {
+      'items': items,
+      'refund_amount': refundAmount,
+      'notes': notes,
+    });
+    return SalesReturnModel.fromJson(response.data);
+  }
+
+  Future<List<SalesReturnModel>> getReturns(int invoiceId) async {
+    final response = await _dio.get('/sales/$invoiceId/returns');
+    return (response.data as List).map((e) => SalesReturnModel.fromJson(e)).toList();
   }
 
   Future<String> aiChat(String message) async {
