@@ -47,6 +47,69 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     );
   }
 
+  void _showLowStockAlerts() {
+    final stockAsync = ref.read(stockProvider);
+    final productsAsync = ref.read(filteredProductsProvider);
+
+    final lowStockItems = <Map<String, dynamic>>[];
+    if (stockAsync is AsyncData<List<StockInfo>> && productsAsync is AsyncData<List<ProductModel>>) {
+      final products = productsAsync.value!;
+      final stocks = stockAsync.value!;
+
+      for (final product in products) {
+        final productStocks = stocks.where((s) => s.productId == product.productId).toList();
+        final totalQty = productStocks.fold<double>(0, (sum, s) => sum + s.quantity);
+        if (totalQty <= 10) {
+          lowStockItems.add({'product': product, 'quantity': totalQty});
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber, color: AppColors.warning, size: 22),
+            const SizedBox(width: 8),
+            Text('Low Stock Alerts (${lowStockItems.length})'),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          height: 400,
+          child: lowStockItems.isEmpty
+              ? const Center(child: Text('All products are well stocked!', style: TextStyle(color: AppColors.textSecondary)))
+              : ListView.separated(
+                  itemCount: lowStockItems.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final item = lowStockItems[i];
+                    final product = item['product'] as ProductModel;
+                    final qty = item['quantity'] as double;
+                    final isOut = qty <= 0;
+                    return ListTile(
+                      leading: Icon(
+                        isOut ? Icons.error : Icons.warning_amber,
+                        color: isOut ? AppColors.error : AppColors.warning,
+                      ),
+                      title: Text(product.productName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                      subtitle: Text(
+                        isOut ? 'OUT OF STOCK' : '${qty.toStringAsFixed(1)} ${product.baseUnit} remaining',
+                        style: TextStyle(fontSize: 12, color: isOut ? AppColors.error : AppColors.warning),
+                      ),
+                      trailing: Text('EGP ${product.sellingPrice}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final kpis = ref.watch(productKpisProvider);
@@ -95,7 +158,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      onPressed: () {},
+                      onPressed: () => _showLowStockAlerts(),
                       icon: const Icon(Icons.notifications_outlined),
                       tooltip: 'Low stock alerts',
                     ),
