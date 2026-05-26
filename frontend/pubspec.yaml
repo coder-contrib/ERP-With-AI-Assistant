@@ -1,7 +1,7 @@
 name: ceramic_erp
 description: Ceramic Showroom ERP - Enterprise Management System
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -26,6 +26,10 @@ dependencies:
   toastification: ^1.2.1
   json_annotation: ^4.8.1
   web_socket_channel: ^2.4.0
+  record: ^5.1.0
+  just_audio: ^0.9.37
+  audio_waveforms: ^1.0.5
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:
