@@ -184,6 +184,24 @@ class ProductsRepository {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<void> adjustStock({
+    required int productId,
+    required int warehouseId,
+    required double quantity,
+    required String unitType,
+    required double costPerUnit,
+    required String transactionType,
+  }) async {
+    await _dio.post('/inventory/transactions', data: {
+      'product_id': productId,
+      'warehouse_id': warehouseId,
+      'quantity': quantity,
+      'unit_type': unitType,
+      'cost_per_unit': costPerUnit,
+      'transaction_type': transactionType,
+    });
+  }
+
   Future<Map<String, dynamic>> aiChat(String message) async {
     final response = await _dio.post('/ai/chat', data: {
       'session_id': 'products_page',
