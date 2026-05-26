@@ -98,6 +98,15 @@ class AppShell extends ConsumerWidget {
                         ),
                       ),
                       const Spacer(),
+                      // Voice AI button
+                      IconButton(
+                        onPressed: () => context.go('/voice-ai'),
+                        icon: const Icon(Icons.record_voice_over_rounded),
+                        tooltip: 'Voice AI',
+                        style: IconButton.styleFrom(foregroundColor: AppColors.primary),
+                      ),
+                      const SizedBox(width: 4),
+                      // AI button
                       IconButton(
                         onPressed: () => context.go('/voice-ai'),
                         icon: const Icon(Icons.record_voice_over_rounded),

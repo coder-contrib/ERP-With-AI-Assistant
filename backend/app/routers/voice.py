@@ -42,12 +42,16 @@ async def voice_respond(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Full voice pipeline: audio → transcription → Claude AI → text response."""
+    """Full voice pipeline: audio → transcription → Claude AI → text response.
+    Use /voice/respond/audio for TTS audio output.
+    """
     audio_data = await file.read()
     voice_service = VoiceService()
 
+    # Step 1: Transcribe
     transcription = await voice_service.transcribe(audio_data, language)
 
+    # Step 2: Process through Claude
     orchestrator = VoiceOrchestrator(db)
     result = orchestrator.process_voice_message(session_id, transcription["text"])
 
@@ -71,11 +75,14 @@ async def voice_respond_audio(
     audio_data = await file.read()
     voice_service = VoiceService()
 
+    # Transcribe
     transcription = await voice_service.transcribe(audio_data, language)
 
+    # Process through Claude
     orchestrator = VoiceOrchestrator(db)
     result = orchestrator.process_voice_message(session_id, transcription["text"])
 
+    # Generate TTS
     async def audio_stream():
         async for chunk in voice_service.text_to_speech_stream(result["text"]):
             yield chunk
@@ -128,6 +135,7 @@ async def voice_chat_text(
     orchestrator = VoiceOrchestrator(db)
     result = orchestrator.process_voice_message(data.session_id, data.text)
 
+    # Generate audio
     voice_service = VoiceService()
     audio_bytes = await voice_service.text_to_speech(result["text"])
     audio_b64 = base64.b64encode(audio_bytes).decode()

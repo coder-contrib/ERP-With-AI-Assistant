@@ -91,6 +91,18 @@ class VoiceService {
     return VoiceResponse.fromJson(response.data);
   }
 
+  Future<VoiceResponse> voiceChatWithAudio(Uint8List audioData, {String sessionId = 'voice-default', String language = 'auto'}) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(audioData, filename: 'audio.wav'),
+      'session_id': sessionId,
+      'language': language,
+    });
+
+    final response = await _dio.post('/ai/voice/chat', data: formData,
+      options: Options(contentType: 'multipart/form-data'));
+    return VoiceResponse.fromJson(response.data);
+  }
+
   Future<VoiceResponse> textToVoiceChat(String text, {String sessionId = 'voice-default'}) async {
     final response = await _dio.post('/ai/voice/chat', data: {
       'text': text,

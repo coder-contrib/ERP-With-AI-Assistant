@@ -7,6 +7,7 @@ import '../data/ai_repository.dart';
 import 'voice_controller.dart';
 import 'widgets/voice_waveform.dart';
 import 'widgets/ai_speaking_indicator.dart';
+import 'widgets/chat_bubble.dart';
 
 class VoiceChatPage extends ConsumerStatefulWidget {
   const VoiceChatPage({super.key});
@@ -61,6 +62,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       ref.read(voiceChatProvider.notifier).stopListening();
       _bgAnimController.stop();
       _bgAnimController.reset();
+      // Simulate sending recorded audio (in production, use record package)
       _simulateVoiceInput();
     }
   }
@@ -68,6 +70,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
   void _simulateVoiceInput() {
     // In production: use the `record` package to capture audio
     // Then call: ref.read(voiceChatProvider.notifier).processAudio(audioBytes);
+    // For now, show text input as fallback
     setState(() => _showTextInput = true);
   }
 
@@ -98,8 +101,11 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
+          // Header
           _buildHeader(voiceState, isDark),
           const SizedBox(height: 16),
+
+          // Chat messages
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -120,6 +126,8 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                       },
                     ),
                   ),
+
+                  // State indicator
                   if (voiceState.voiceState != VoiceState.idle)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -128,6 +136,8 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                         toolName: voiceState.currentTool,
                       ),
                     ),
+
+                  // Speaking indicator
                   if (voiceState.voiceState == VoiceState.speaking)
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -137,7 +147,10 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               ),
             ),
           ),
+
           const SizedBox(height: 16),
+
+          // Voice controls
           _buildVoiceControls(voiceState, isDark),
         ],
       ),
@@ -161,7 +174,8 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
             const Text('Voice AI Assistant', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
             Row(children: [
               Container(
-                width: 8, height: 8,
+                width: 8,
+                height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: voiceState.voiceState == VoiceState.idle ? AppColors.success : AppColors.warning,
@@ -241,6 +255,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       ),
       child: Column(
         children: [
+          // Waveform
           if (voiceState.voiceState == VoiceState.listening)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -251,15 +266,20 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               padding: const EdgeInsets.only(bottom: 16),
               child: VoiceWaveform(isActive: true, color: AppColors.primary, height: 50),
             ),
+
+          // Mic button
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Keyboard toggle
               IconButton(
                 onPressed: () => setState(() => _showTextInput = true),
                 icon: const Icon(Icons.keyboard, size: 22),
                 style: IconButton.styleFrom(backgroundColor: (isDark ? Colors.white : Colors.black).withOpacity(0.05)),
               ),
               const SizedBox(width: 24),
+
+              // Main mic button
               PulsingMicButton(
                 isRecording: _isRecording || voiceState.voiceState == VoiceState.listening,
                 onTap: voiceState.voiceState == VoiceState.processing || voiceState.voiceState == VoiceState.speaking
@@ -267,7 +287,10 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                     : _toggleRecording,
                 size: 72,
               ),
+
               const SizedBox(width: 24),
+
+              // Stop speaking button (visible when AI is speaking)
               if (voiceState.voiceState == VoiceState.speaking)
                 IconButton(
                   onPressed: () => ref.read(voiceChatProvider.notifier).onSpeakingDone(),
@@ -278,7 +301,10 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                 const SizedBox(width: 40),
             ],
           ),
+
           const SizedBox(height: 12),
+
+          // Instructions
           Text(
             voiceState.voiceState == VoiceState.listening
                 ? 'بسمعك... اتكلم عادي'
@@ -307,7 +333,9 @@ class _VoiceChatBubble extends StatelessWidget {
     final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final bgColor = isUser
         ? AppColors.primary.withOpacity(0.1)
-        : isDark ? AppColors.darkBackground : Colors.grey.shade50;
+        : isDark
+            ? AppColors.darkBackground
+            : Colors.grey.shade50;
     final borderColor = isUser ? AppColors.primary.withOpacity(0.3) : (isDark ? AppColors.darkBorder : AppColors.border);
 
     return Padding(
@@ -315,6 +343,7 @@ class _VoiceChatBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: alignment,
         children: [
+          // Tool badges
           if (message.toolCalls != null && message.toolCalls!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
@@ -335,6 +364,8 @@ class _VoiceChatBubble extends StatelessWidget {
                 )).toList(),
               ),
             ),
+
+          // Message bubble
           Container(
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -371,6 +402,7 @@ class _VoiceChatBubble extends StatelessWidget {
   TextDirection _detectDirection(String text) {
     if (text.isEmpty) return TextDirection.ltr;
     final firstChar = text.trim().codeUnitAt(0);
+    // Arabic Unicode range
     if (firstChar >= 0x0600 && firstChar <= 0x06FF) return TextDirection.rtl;
     if (firstChar >= 0xFE70 && firstChar <= 0xFEFF) return TextDirection.rtl;
     return TextDirection.ltr;

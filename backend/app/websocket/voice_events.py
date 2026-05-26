@@ -33,7 +33,13 @@ voice_ws_manager = VoiceWebSocketManager()
 
 
 async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session):
-    """Handle a realtime voice WebSocket connection."""
+    """Handle a realtime voice WebSocket connection.
+
+    Protocol:
+    - Client sends: {"type": "audio", "data": "<base64 audio>"}
+    - Client sends: {"type": "text", "data": {"message": "..."}}
+    - Server sends: {"type": "<VoiceStreamEvent>", "data": {...}}
+    """
     await voice_ws_manager.connect(session_id, websocket)
     voice_service = VoiceService()
     orchestrator = VoiceOrchestrator(db)
@@ -50,22 +56,28 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
                 audio_b64 = message.get("data", "")
                 audio_bytes = base64.b64decode(audio_b64)
 
+                # Transcribe
                 transcription = await voice_service.transcribe(audio_bytes)
                 await websocket.send_json({
                     "type": VoiceStreamEvent.TRANSCRIPTION_COMPLETE,
                     "data": transcription,
                 })
 
+                # Process through Claude
                 async for event in orchestrator.process_voice_stream(session_id, transcription["text"]):
                     await websocket.send_json(event)
 
-                response_text = ""
+                # Generate TTS
+                response_text = transcription.get("text", "")
                 async for event in orchestrator.process_voice_stream(session_id, transcription["text"]):
                     if event["type"] == "ai_response_complete":
                         response_text = event["data"]["text"]
                         break
 
+                # Stream audio back
+                audio_chunks = []
                 async for chunk in voice_service.text_to_speech_stream(response_text):
+                    audio_chunks.append(chunk)
                     await websocket.send_bytes(chunk)
 
                 await websocket.send_json({
@@ -81,6 +93,7 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
                 async for event in orchestrator.process_voice_stream(session_id, text):
                     await websocket.send_json(event)
 
+                # Get final text for TTS
                 result = orchestrator.process_voice_message(session_id, text)
                 tts_text = result["text"]
 

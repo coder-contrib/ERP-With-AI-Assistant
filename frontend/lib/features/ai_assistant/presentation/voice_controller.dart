@@ -89,18 +89,22 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         _addMessage(AIMessage(role: 'user', content: text));
         state = state.copyWith(voiceState: VoiceState.processing, partialTranscription: null);
         break;
+
       case 'transcription_partial':
         state = state.copyWith(partialTranscription: data['text']);
         break;
+
       case 'tool_call_started':
         state = state.copyWith(
           voiceState: VoiceState.toolExecution,
           currentTool: _formatToolName(data['tool'] ?? ''),
         );
         break;
+
       case 'tool_call_finished':
         state = state.copyWith(currentTool: null);
         break;
+
       case 'ai_response_complete':
         final text = data['text'] ?? '';
         _addMessage(AIMessage(
@@ -110,12 +114,19 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         ));
         state = state.copyWith(currentAiText: text);
         break;
+
       case 'ai_speaking':
         state = state.copyWith(voiceState: VoiceState.speaking);
         break;
+
       case 'ai_finished':
         state = state.copyWith(voiceState: VoiceState.idle);
         break;
+
+      case 'audio_chunk':
+        // Audio chunks handled by audio player at UI level
+        break;
+
       case 'error':
         state = state.copyWith(
           voiceState: VoiceState.idle,
@@ -137,6 +148,7 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
     state = state.copyWith(voiceState: VoiceState.processing);
 
     try {
+      // Use REST endpoint for reliability
       final transcription = await _voiceService.transcribe(audioData);
       _addMessage(AIMessage(role: 'user', content: transcription.text));
 
@@ -155,6 +167,8 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         voiceState: response.audioBase64 != null ? VoiceState.speaking : VoiceState.idle,
         currentAiText: response.transcript,
       );
+
+      // Audio playback handled at UI level via response.audioBase64
     } catch (e) {
       state = state.copyWith(
         voiceState: VoiceState.idle,
