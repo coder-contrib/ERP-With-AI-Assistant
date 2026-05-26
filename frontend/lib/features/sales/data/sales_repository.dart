@@ -93,6 +93,7 @@ class InvoiceItemModel {
   final double unitPrice;
   final double discount;
   final double totalPrice;
+  final double returnedQuantity;
 
   InvoiceItemModel({
     required this.itemId,
@@ -103,6 +104,7 @@ class InvoiceItemModel {
     required this.unitPrice,
     required this.discount,
     required this.totalPrice,
+    this.returnedQuantity = 0,
   });
 
   factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
@@ -115,8 +117,11 @@ class InvoiceItemModel {
       unitPrice: double.tryParse(json['unit_price']?.toString() ?? '0') ?? 0,
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0,
       totalPrice: double.tryParse(json['total_price']?.toString() ?? '0') ?? 0,
+      returnedQuantity: double.tryParse(json['returned_quantity']?.toString() ?? '0') ?? 0,
     );
   }
+
+  double get returnableQuantity => soldQuantity - returnedQuantity;
 }
 
 class SalesItemModel {
