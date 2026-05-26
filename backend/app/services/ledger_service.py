@@ -34,7 +34,6 @@ class LedgerService:
 
     def record_sale(self, invoice_id: int, total_amount: Decimal, cogs: Decimal,
                     cash_received: Decimal, is_credit: bool):
-        # Debit: Cash or Accounts Receivable
         if is_credit:
             receivable = total_amount - cash_received
             if cash_received > 0:
@@ -47,25 +46,20 @@ class LedgerService:
             self._entry(ACCOUNT_CODES["cash"], debit=total_amount, credit=Decimal("0"),
                         entity_type="sales_invoice", entity_id=invoice_id, description="Cash sale")
 
-        # Credit: Sales Revenue
         self._entry(ACCOUNT_CODES["sales_revenue"], debit=Decimal("0"), credit=total_amount,
                     entity_type="sales_invoice", entity_id=invoice_id, description="Sales revenue")
 
-        # Debit: COGS
         self._entry(ACCOUNT_CODES["cogs"], debit=cogs, credit=Decimal("0"),
                     entity_type="sales_invoice", entity_id=invoice_id, description="Cost of goods sold")
 
-        # Credit: Inventory
         self._entry(ACCOUNT_CODES["inventory"], debit=Decimal("0"), credit=cogs,
                     entity_type="sales_invoice", entity_id=invoice_id, description="Inventory reduction")
 
     def record_purchase(self, purchase_invoice_id: int, total_amount: Decimal,
                         cash_paid: Decimal, is_credit: bool):
-        # Debit: Inventory
         self._entry(ACCOUNT_CODES["inventory"], debit=total_amount, credit=Decimal("0"),
                     entity_type="purchase_invoice", entity_id=purchase_invoice_id, description="Inventory addition")
 
-        # Credit: Cash or Accounts Payable
         if cash_paid > 0:
             self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=cash_paid,
                         entity_type="purchase_invoice", entity_id=purchase_invoice_id, description="Cash paid for purchase")
@@ -76,35 +70,27 @@ class LedgerService:
                             entity_type="purchase_invoice", entity_id=purchase_invoice_id, description="Purchase on credit")
 
     def record_customer_payment(self, payment_id: int, amount: Decimal):
-        # Debit: Cash
         self._entry(ACCOUNT_CODES["cash"], debit=amount, credit=Decimal("0"),
                     entity_type="customer_payment", entity_id=payment_id, description="Customer payment received")
-        # Credit: Accounts Receivable
         self._entry(ACCOUNT_CODES["accounts_receivable"], debit=Decimal("0"), credit=amount,
                     entity_type="customer_payment", entity_id=payment_id, description="Receivable settled")
 
     def record_supplier_payment(self, payment_id: int, amount: Decimal):
-        # Debit: Accounts Payable
         self._entry(ACCOUNT_CODES["accounts_payable"], debit=amount, credit=Decimal("0"),
                     entity_type="supplier_payment", entity_id=payment_id, description="Payable settled")
-        # Credit: Cash
         self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=amount,
                     entity_type="supplier_payment", entity_id=payment_id, description="Cash paid to supplier")
 
     def record_expense(self, expense_id: int, amount: Decimal, category: str):
-        # Debit: Operating Expenses
         self._entry(ACCOUNT_CODES["operating_expenses"], debit=amount, credit=Decimal("0"),
                     entity_type="expense", entity_id=expense_id, description=f"Expense: {category}")
-        # Credit: Cash
         self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=amount,
                     entity_type="expense", entity_id=expense_id, description=f"Cash out: {category}")
 
     def record_sales_return(self, return_id: int, returned_amount: Decimal,
                             refund_amount: Decimal, cogs: Decimal):
-        # Debit: Sales Returns (contra-revenue)
         self._entry(ACCOUNT_CODES["sales_returns"], debit=returned_amount, credit=Decimal("0"),
                     entity_type="sales_return", entity_id=return_id, description="Sales return")
-        # Credit: Cash or Accounts Receivable (refund)
         if refund_amount > 0:
             self._entry(ACCOUNT_CODES["cash"], debit=Decimal("0"), credit=refund_amount,
                         entity_type="sales_return", entity_id=return_id, description="Cash refund for return")
@@ -112,9 +98,7 @@ class LedgerService:
         if credit_portion > 0:
             self._entry(ACCOUNT_CODES["accounts_receivable"], debit=Decimal("0"), credit=credit_portion,
                         entity_type="sales_return", entity_id=return_id, description="Receivable reduced by return")
-        # Debit: Inventory (goods back in)
         self._entry(ACCOUNT_CODES["inventory"], debit=cogs, credit=Decimal("0"),
                     entity_type="sales_return", entity_id=return_id, description="Inventory restored from return")
-        # Credit: COGS (reverse)
         self._entry(ACCOUNT_CODES["cogs"], debit=Decimal("0"), credit=cogs,
                     entity_type="sales_return", entity_id=return_id, description="COGS reversal for return")
