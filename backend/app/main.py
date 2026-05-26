@@ -5,7 +5,7 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
 from app.events.registry import register_event_handlers
-from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws, insights, anomalies, opening_balances
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws, insights, anomalies, opening_balances, voice
 
 
 @asynccontextmanager
@@ -18,8 +18,8 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(
     title="Ceramic Showroom ERP API",
-    version="4.2.0",
-    description="Adaptive intelligence ERP with anomaly detection",
+    version="4.3.0",
+    description="Adaptive intelligence ERP with Voice AI and anomaly detection",
     lifespan=lifespan,
 )
 
@@ -40,6 +40,7 @@ app.include_router(insights.router, prefix="/api/insights", tags=["AI Insights"]
 app.include_router(anomalies.router, prefix="/api/anomalies", tags=["Anomaly Detection"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI Assistant"])
+app.include_router(voice.router, prefix="/api/ai/voice", tags=["Voice AI"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["Embeddings"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
@@ -60,7 +61,7 @@ app.include_router(ws.router, tags=["WebSocket"])
 
 @app.get("/")
 def root():
-    return {"message": "Ceramic Showroom ERP API", "version": "4.2.0"}
+    return {"message": "Ceramic Showroom ERP API", "version": "4.3.0"}
 
 
 @app.get("/health")
