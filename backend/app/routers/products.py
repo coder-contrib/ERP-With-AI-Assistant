@@ -33,6 +33,18 @@ def update_product(product_id: int, data: ProductUpdate, current_user: User = De
     return service.update(product_id, data)
 
 
+@router.delete("/{product_id}", response_model=ProductResponse)
+def delete_product(product_id: int, current_user: User = Depends(require_permission("products:write")), db: Session = Depends(get_db)):
+    service = ProductService(db)
+    return service.deactivate(product_id)
+
+
+@router.post("/{product_id}/toggle-status", response_model=ProductResponse)
+def toggle_product_status(product_id: int, current_user: User = Depends(require_permission("products:write")), db: Session = Depends(get_db)):
+    service = ProductService(db)
+    return service.toggle_status(product_id)
+
+
 @router.get("/{product_id}/conversions", response_model=list[ConversionResponse])
 def get_conversions(product_id: int, current_user: User = Depends(require_permission("products:read")), db: Session = Depends(get_db)):
     service = ProductService(db)
@@ -43,3 +55,9 @@ def get_conversions(product_id: int, current_user: User = Depends(require_permis
 def add_conversion(product_id: int, data: ConversionCreate, current_user: User = Depends(require_permission("products:write")), db: Session = Depends(get_db)):
     service = ProductService(db)
     return service.add_conversion(product_id, data)
+
+
+@router.delete("/{product_id}/conversions/{conversion_id}", status_code=204)
+def delete_conversion(product_id: int, conversion_id: int, current_user: User = Depends(require_permission("products:write")), db: Session = Depends(get_db)):
+    service = ProductService(db)
+    service.delete_conversion(product_id, conversion_id)
