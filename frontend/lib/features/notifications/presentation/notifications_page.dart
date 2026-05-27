@@ -96,6 +96,39 @@ class NotificationsPage extends ConsumerWidget {
     );
   }
 
+  void _showSnackBar(BuildContext context, {required String message, required IconData icon, required Color color}) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
+        elevation: 4,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _markRead(WidgetRef ref, int notificationId) async {
     final repo = ref.read(notificationsRepositoryProvider);
     await repo.markAsRead(notificationId);
@@ -109,7 +142,12 @@ class NotificationsPage extends ConsumerWidget {
     ref.invalidate(notificationsProvider);
     ref.invalidate(unreadCountProvider);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All notifications marked as read'), duration: Duration(seconds: 2)));
+      _showSnackBar(
+        context,
+        message: 'All notifications marked as read',
+        icon: Icons.done_all_rounded,
+        color: AppColors.primary,
+      );
     }
   }
 
@@ -122,11 +160,30 @@ class NotificationsPage extends ConsumerWidget {
       if (context.mounted) {
         final newAlerts = result['new_notifications'] as Map<String, dynamic>? ?? {};
         final total = (newAlerts['low_stock_alerts'] as int? ?? 0) + (newAlerts['credit_limit_exceeded'] as int? ?? 0) + (newAlerts['overdue_supplier_payments'] as int? ?? 0);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Check complete: $total new alert${total == 1 ? '' : 's'} found'), duration: const Duration(seconds: 2)));
+        if (total > 0) {
+          _showSnackBar(
+            context,
+            message: '$total new alert${total == 1 ? '' : 's'} found',
+            icon: Icons.notification_important_rounded,
+            color: AppColors.warning,
+          );
+        } else {
+          _showSnackBar(
+            context,
+            message: 'No new alerts — everything looks good',
+            icon: Icons.check_circle_rounded,
+            color: const Color(0xFF2E7D32),
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+        _showSnackBar(
+          context,
+          message: 'Failed to run checks: $e',
+          icon: Icons.error_rounded,
+          color: AppColors.error,
+        );
       }
     }
   }
