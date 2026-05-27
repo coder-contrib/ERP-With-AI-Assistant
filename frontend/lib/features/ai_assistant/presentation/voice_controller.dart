@@ -86,7 +86,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
 
   /// Barge-in: interrupt AI while speaking and immediately start listening
   Future<void> bargeIn() async {
-    // Signal to stop audio playback immediately
     state = state.copyWith(
       shouldStopAudio: true,
       voiceState: VoiceState.idle,
@@ -94,29 +93,23 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
       partialTranscription: null,
     );
 
-    // Send barge-in signal to backend to cancel TTS/processing
     _voiceService.sendJsonViaWs({'type': 'barge_in'});
 
-    // Clear the stop flag after a frame
     await Future.delayed(const Duration(milliseconds: 50));
     state = state.copyWith(shouldStopAudio: false);
 
-    // Immediately start streaming (new user input)
     await startStreaming();
   }
 
   /// Start live streaming mode: audio is streamed in real-time for transcription
   Future<void> startStreaming() async {
-    // Connect WebSocket if not already connected
     if (!state.isConnected) {
       _voiceService.connectWebSocket(state.sessionId);
       _eventSub = _voiceService.events.listen(_handleEvent);
     }
 
-    // Tell backend to start streaming session
     _voiceService.sendJsonViaWs({'type': 'stream_start', 'language': 'ar'});
 
-    // Start recording with stream output
     final stream = await _recorder.startStream(
       const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
@@ -125,7 +118,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
       ),
     );
 
-    // Forward audio chunks to backend via WebSocket
     _audioStreamSub = stream.listen((chunk) {
       final b64 = base64Encode(chunk);
       _voiceService.sendJsonViaWs({'type': 'stream_audio', 'data': b64});
@@ -140,12 +132,10 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
 
   /// Stop live streaming and trigger AI processing
   Future<void> stopStreaming() async {
-    // Stop recording
     await _audioStreamSub?.cancel();
     _audioStreamSub = null;
     await _recorder.stop();
 
-    // Tell backend stream ended
     _voiceService.sendJsonViaWs({'type': 'stream_stop'});
 
     state = state.copyWith(
@@ -203,7 +193,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         break;
 
       case 'stop_audio':
-        // Backend says stop playing audio immediately (barge-in cleanup)
         state = state.copyWith(
           shouldStopAudio: true,
           voiceState: VoiceState.idle,
@@ -216,7 +205,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         break;
 
       case 'barge_in_ack':
-        // Backend confirmed barge-in, we're already transitioning to listening
         break;
 
       case 'error':
@@ -308,18 +296,115 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
 
   String _formatToolName(String tool) {
     const names = {
+      // Sales (Read)
       'get_today_sales': 'بجيب مبيعات النهارده',
       'get_customer_info': 'بشوف بيانات العميل',
-      'get_stock_level': 'براجع المخزون',
-      'get_cash_balance': 'بحسب الكاش',
-      'get_profit_and_loss': 'بحلل الأرباح',
+      'get_customer_history': 'بجيب سجل العميل',
       'get_top_selling_products': 'بشوف الأكتر مبيعاً',
       'get_unpaid_invoices': 'بدور على المتأخرات',
+      // Inventory (Read)
+      'get_stock_level': 'براجع المخزون',
+      'get_low_stock_items': 'بشوف الأصناف الناقصة',
+      'get_stock_movement_history': 'بتابع حركة المخزون',
+      'get_warehouse_summary': 'بجيب ملخص المخزن',
+      'get_dead_stock': 'بشوف البضاعة الراكدة',
+      'get_stock_valuation': 'بحسب قيمة المخزون',
+      // Finance (Read)
+      'get_profit_and_loss': 'بحلل الأرباح',
+      'get_cash_balance': 'بحسب الكاش',
+      'get_receivables_summary': 'بجيب المديونيات',
+      'get_payables_summary': 'بجيب المستحقات',
+      'get_expense_breakdown': 'بفصّل المصروفات',
+      'get_daily_revenue': 'بجيب الإيراد اليومي',
+      'demand_forecast': 'بتوقع الطلب',
+      // Search
       'search_products': 'بدور على منتج',
       'search_customers': 'بدور على عميل',
+      'search_suppliers': 'بدور على مورد',
+      // Sales (Write)
       'create_invoice': 'بعمل فاتورة',
+      'cancel_invoice': 'بلغي الفاتورة',
+      'apply_discount': 'بطبق الخصم',
+      // Payments
       'record_payment': 'بسجل دفعة',
+      'refund_payment': 'برد المبلغ',
+      // Inventory (Write)
+      'update_stock': 'بحدّث المخزون',
       'transfer_stock': 'بنقل بضاعة',
+      'adjust_stock': 'بعدّل المخزون',
+      // CRM
+      'create_customer': 'بسجل عميل جديد',
+      'update_customer': 'بعدّل بيانات العميل',
+      // Opening Balances
+      'set_customer_opening_balance': 'بسجل رصيد أول المدة للعميل',
+      'set_supplier_opening_balance': 'بسجل رصيد أول المدة للمورد',
+      'set_cash_opening_balance': 'بسجل رصيد الصندوق',
+      'set_opening_inventory': 'بسجل جرد أول المدة',
+      'get_opening_balances': 'بجيب الأرصدة الافتتاحية',
+      // Expenses
+      'create_expense': 'بسجل مصروف',
+      'list_expenses': 'بجيب المصروفات',
+      'get_expense_summary': 'بلخص المصروفات',
+      // Sales Invoices
+      'list_sales_invoices': 'بجيب فواتير المبيعات',
+      'get_sales_invoice': 'بفتح الفاتورة',
+      'get_invoice_items': 'بشوف أصناف الفاتورة',
+      'create_sales_return': 'بعمل مرتجع مبيعات',
+      // Purchases
+      'list_purchase_invoices': 'بجيب فواتير المشتريات',
+      'get_purchase_invoice': 'بفتح فاتورة المشتريات',
+      'get_purchase_items': 'بشوف أصناف المشتريات',
+      'create_purchase_invoice': 'بعمل فاتورة مشتريات',
+      'create_purchase_return': 'بعمل مرتجع مشتريات',
+      // Suppliers
+      'create_supplier': 'بسجل مورد جديد',
+      'update_supplier': 'بعدّل بيانات المورد',
+      // Products
+      'create_product': 'بضيف منتج جديد',
+      'update_product': 'بعدّل بيانات المنتج',
+      'get_product': 'بجيب تفاصيل المنتج',
+      // Categories
+      'list_categories': 'بجيب التصنيفات',
+      'create_category': 'بعمل تصنيف جديد',
+      'update_category': 'بعدّل التصنيف',
+      'delete_category': 'بحذف التصنيف',
+      // Reports
+      'get_monthly_profit': 'بحسب الأرباح الشهرية',
+      'get_cash_flow': 'بحلل التدفق النقدي',
+      'get_waste_report': 'بجيب تقرير الهالك',
+      // Notifications
+      'get_notifications': 'بجيب الإشعارات',
+      'mark_notification_read': 'بعلّم الإشعار مقروء',
+      'mark_all_notifications_read': 'بعلّم الكل مقروء',
+      // Alerts
+      'check_low_stock_alerts': 'بفحص تنبيهات المخزون',
+      'check_credit_limit_alerts': 'بفحص تجاوز الائتمان',
+      'check_overdue_supplier_alerts': 'بفحص المدفوعات المتأخرة',
+      // Anomaly Detection
+      'scan_anomalies': 'بفحص الانحرافات',
+      'detect_revenue_anomaly': 'بكشف انحراف الإيرادات',
+      'detect_expense_anomaly': 'بكشف انحراف المصروفات',
+      // Business Insights
+      'get_business_insights': 'بحلل رؤى الأعمال',
+      'why_profit_dropped': 'بحلل سبب انخفاض الربح',
+      'get_top_risks': 'بجيب أهم المخاطر',
+      // Dashboard
+      'get_dashboard_summary': 'بجيب ملخص لوحة التحكم',
+      // Accounting Tasks
+      'refresh_daily_summary': 'بحدّث الملخص اليومي',
+      'refresh_summary_range': 'بحدّث ملخص الفترة',
+      // User Management
+      'list_users': 'بجيب المستخدمين',
+      'create_user': 'بعمل مستخدم جديد',
+      'deactivate_user': 'بعطّل المستخدم',
+      'activate_user': 'بفعّل المستخدم',
+      'reset_user_password': 'بغيّر كلمة السر',
+      // Ledger
+      'get_ledger_entries': 'بجيب القيود المحاسبية',
+      'get_account_balance': 'بحسب رصيد الحساب',
+      'get_trial_balance': 'بجيب ميزان المراجعة',
+      // Safety
+      'confirm_transaction': 'بأكد العملية',
     };
     return names[tool] ?? 'بشتغل...';
   }
