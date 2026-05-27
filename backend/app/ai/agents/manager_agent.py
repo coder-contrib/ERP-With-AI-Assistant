@@ -1,61 +1,79 @@
+import anthropic
+import json
 from sqlalchemy.orm import Session
-from app.ai.agents.sales_agent import SalesAgent
-from app.ai.agents.inventory_agent import InventoryAgent
-from app.ai.agents.accounting_agent import AccountingAgent
-from app.ai.tools.reporting_tools import ReportingTools
+from app.config import settings
+from app.ai.executor import ToolExecutor
+from app.ai.memory.conversation import ConversationMemory
 from app.ai.prompts.system_prompts import MANAGER_AGENT_PROMPT
+from app.ai.tools.tool_schemas import TOOL_SCHEMAS
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ManagerAgent:
-    """Meta-agent that routes queries to specialized agents.
-    Acts as the main AI interface — determines intent and delegates.
+    """Planner / Router ONLY.
+    Uses Claude to understand user intent and decide which tools to call.
+    Does NOT execute anything itself — passes decisions to the ToolExecutor.
     """
 
     def __init__(self, db: Session):
         self.db = db
-        self.system_prompt = MANAGER_AGENT_PROMPT
-        self.agents = {
-            "sales": SalesAgent(db),
-            "inventory": InventoryAgent(db),
-            "accounting": AccountingAgent(db),
-        }
-        self.reporting = ReportingTools(db)
+        self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self.model = settings.ai_model
+        self.executor = ToolExecutor(db)
 
-    def classify_intent(self, query: str) -> str:
-        query_lower = query.lower()
-        inventory_keywords = ["stock", "quantity", "warehouse", "available", "meters", "pieces", "carton", "low stock", "dead stock", "transfer"]
-        sales_keywords = ["sale", "sold", "invoice", "customer", "revenue", "top selling", "best selling", "unpaid"]
-        accounting_keywords = ["profit", "loss", "expense", "cash", "balance", "receivable", "payable", "margin", "cost", "financial"]
+    def chat(self, session_id: str, user_message: str) -> str:
+        memory = ConversationMemory(session_id)
+        memory.add_user_message(user_message)
+        history = memory.get_context_window(max_messages=20)
 
-        scores = {"inventory": 0, "sales": 0, "accounting": 0}
-        for kw in inventory_keywords:
-            if kw in query_lower:
-                scores["inventory"] += 1
-        for kw in sales_keywords:
-            if kw in query_lower:
-                scores["sales"] += 1
-        for kw in accounting_keywords:
-            if kw in query_lower:
-                scores["accounting"] += 1
+        messages = []
+        for msg in history:
+            if msg["role"] in ("user", "assistant"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
 
-        if max(scores.values()) == 0:
-            return "sales"
-        return max(scores, key=scores.get)
+        # Manager plans: Claude decides which tools to call
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            system=MANAGER_AGENT_PROMPT,
+            tools=TOOL_SCHEMAS,
+            messages=messages,
+        )
 
-    def get_tools_schema(self) -> list[dict]:
-        all_tools = []
-        for agent_type, agent in self.agents.items():
-            for tool in agent.get_tools_schema():
-                tool["agent"] = agent_type
-                all_tools.append(tool)
-        return all_tools
+        # Planning loop: Manager plans, Executor executes
+        while response.stop_reason == "tool_use":
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    logger.info(f"Manager planned: {block.name}")
+                    # Execution layer handles it — no LLM here
+                    result = self.executor.execute(block.name, block.input)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+                    memory.add_tool_result(block.name, json.loads(result))
 
-    def execute_query(self, query: str) -> dict:
-        intent = self.classify_intent(query)
-        agent = self.agents.get(intent)
-        return {
-            "intent": intent,
-            "agent": intent,
-            "tools_available": [t["name"] for t in agent.get_tools_schema()],
-            "system_prompt": agent.system_prompt,
-        }
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results})
+
+            # Manager sees results and plans next step (or responds)
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                system=MANAGER_AGENT_PROMPT,
+                tools=TOOL_SCHEMAS,
+                messages=messages,
+            )
+
+        # Extract final text
+        assistant_text = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                assistant_text += block.text
+
+        memory.add_assistant_message(assistant_text)
+        return assistant_text
