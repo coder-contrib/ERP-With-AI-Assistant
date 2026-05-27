@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/ai_repository.dart';
@@ -21,8 +20,6 @@ class VoiceChatPage extends ConsumerStatefulWidget {
 class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProviderStateMixin {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
-  final _audioRecorder = AudioRecorder();
-  bool _isRecording = false;
   bool _showTextInput = false;
   bool _hasPermission = false;
   late AnimationController _bgAnimController;
@@ -47,7 +44,6 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
-    _audioRecorder.dispose();
     _bgAnimController.dispose();
     super.dispose();
   }
@@ -64,7 +60,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
     });
   }
 
-  Future<void> _toggleRecording() async {
+  Future<void> _toggleStreaming() async {
     if (!_hasPermission) {
       await _checkPermission();
       if (!_hasPermission) {
@@ -75,53 +71,17 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       }
     }
 
-    if (_isRecording) {
-      // Stop recording and process
-      setState(() => _isRecording = false);
+    final voiceState = ref.read(voiceChatProvider);
+
+    if (voiceState.isStreaming) {
+      // Stop streaming and trigger AI processing
       _bgAnimController.stop();
       _bgAnimController.reset();
-      ref.read(voiceChatProvider.notifier).stopListening();
-
-      final path = await _audioRecorder.stop();
-      if (path != null) {
-        // Read the recorded file as bytes
-        final file = await _readFileAsBytes(path);
-        if (file != null) {
-          ref.read(voiceChatProvider.notifier).processAudio(file);
-        }
-      }
+      await ref.read(voiceChatProvider.notifier).stopStreaming();
     } else {
-      // Start recording
-      if (await _audioRecorder.hasPermission()) {
-        setState(() => _isRecording = true);
-        ref.read(voiceChatProvider.notifier).startListening();
-        _bgAnimController.repeat(reverse: true);
-
-        await _audioRecorder.start(
-          const RecordConfig(
-            encoder: AudioEncoder.wav,
-            sampleRate: 16000,
-            numChannels: 1,
-          ),
-          path: '${DateTime.now().millisecondsSinceEpoch}.wav',
-        );
-      }
-    }
-  }
-
-  Future<Uint8List?> _readFileAsBytes(String path) async {
-    try {
-      final file = await java_io_File(path);
-      return await file.readAsBytes();
-    } catch (_) {
-      // Fallback: use dart:io directly
-      try {
-        final f = File(path);
-        return await f.readAsBytes();
-      } catch (e) {
-        debugPrint('Error reading audio file: $e');
-        return null;
-      }
+      // Start live streaming
+      _bgAnimController.repeat(reverse: true);
+      await ref.read(voiceChatProvider.notifier).startStreaming();
     }
   }
 
@@ -178,8 +138,46 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                     ),
                   ),
 
+                  // Live partial transcription display
+                  if (voiceState.partialTranscription != null && voiceState.partialTranscription!.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.hearing, size: 16, color: AppColors.primary.withOpacity(0.7)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              voiceState.partialTranscription!,
+                              textDirection: TextDirection.rtl,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontStyle: FontStyle.italic,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppColors.primary.withOpacity(0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // State indicator
-                  if (voiceState.voiceState != VoiceState.idle)
+                  if (voiceState.voiceState != VoiceState.idle && voiceState.partialTranscription == null)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: VoiceStateIndicator(
@@ -229,12 +227,20 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                 height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: voiceState.voiceState == VoiceState.idle ? AppColors.success : AppColors.warning,
+                  color: voiceState.isStreaming
+                      ? Colors.red
+                      : voiceState.voiceState == VoiceState.idle
+                          ? AppColors.success
+                          : AppColors.warning,
                 ),
               ),
               const SizedBox(width: 6),
               Text(
-                voiceState.voiceState == VoiceState.idle ? 'جاهز للمساعدة' : 'بشتغل...',
+                voiceState.isStreaming
+                    ? 'بسمعك...'
+                    : voiceState.voiceState == VoiceState.idle
+                        ? 'جاهز للمساعدة'
+                        : 'بشتغل...',
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const Spacer(),
@@ -307,7 +313,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       child: Column(
         children: [
           // Waveform
-          if (voiceState.voiceState == VoiceState.listening)
+          if (voiceState.voiceState == VoiceState.listening || voiceState.isStreaming)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: VoiceWaveform(isActive: true, color: Colors.red, height: 50),
@@ -330,12 +336,12 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               ),
               const SizedBox(width: 24),
 
-              // Main mic button
+              // Main mic button - now uses streaming
               PulsingMicButton(
-                isRecording: _isRecording || voiceState.voiceState == VoiceState.listening,
+                isRecording: voiceState.isStreaming || voiceState.voiceState == VoiceState.listening,
                 onTap: voiceState.voiceState == VoiceState.processing || voiceState.voiceState == VoiceState.speaking
                     ? () {}
-                    : _toggleRecording,
+                    : _toggleStreaming,
                 size: 72,
               ),
 
@@ -357,7 +363,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
 
           // Instructions
           Text(
-            voiceState.voiceState == VoiceState.listening
+            voiceState.isStreaming
                 ? 'بسمعك... اتكلم عادي'
                 : voiceState.voiceState == VoiceState.processing
                     ? 'بفكر في الإجابة...'
