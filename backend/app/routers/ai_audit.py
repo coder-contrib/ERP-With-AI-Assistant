@@ -50,6 +50,30 @@ TOOL_CATEGORIES = {
     "create_customer": "عملاء",
     "update_customer": "عملاء",
     "confirm_transaction": "تأكيدات",
+    # Extended tools
+    "set_customer_opening_balance": "أرصدة افتتاحية",
+    "set_supplier_opening_balance": "أرصدة افتتاحية",
+    "set_cash_opening_balance": "أرصدة افتتاحية",
+    "set_opening_inventory": "أرصدة افتتاحية",
+    "get_opening_balances": "أرصدة افتتاحية",
+    "create_expense": "مصروفات",
+    "list_expenses": "مصروفات",
+    "get_expense_summary": "مصروفات",
+    "list_sales_invoices": "فواتير",
+    "get_sales_invoice": "فواتير",
+    "get_invoice_items": "فواتير",
+    "create_sales_return": "مرتجعات",
+    "list_purchase_invoices": "مشتريات",
+    "get_purchase_invoice": "مشتريات",
+    "get_purchase_items": "مشتريات",
+    "create_purchase_invoice": "مشتريات",
+    "create_purchase_return": "مرتجعات",
+    "create_supplier": "موردين",
+    "update_supplier": "موردين",
+    "search_suppliers": "موردين",
+    "create_product": "منتجات",
+    "update_product": "منتجات",
+    "get_product": "منتجات",
 }
 
 
@@ -129,6 +153,30 @@ def _tool_label(tool: str) -> str:
         "confirm_transaction": "تأكيد عملية",
         "demand_forecast": "توقع الطلب",
         "apply_discount": "تطبيق خصم",
+        # Extended tools
+        "set_customer_opening_balance": "رصيد أول المدة - عميل",
+        "set_supplier_opening_balance": "رصيد أول المدة - مورد",
+        "set_cash_opening_balance": "رصيد أول المدة - صندوق",
+        "set_opening_inventory": "جرد أول المدة",
+        "get_opening_balances": "عرض الأرصدة الافتتاحية",
+        "create_expense": "تسجيل مصروف",
+        "list_expenses": "عرض المصروفات",
+        "get_expense_summary": "ملخص المصروفات",
+        "list_sales_invoices": "عرض فواتير المبيعات",
+        "get_sales_invoice": "عرض فاتورة مبيعات",
+        "get_invoice_items": "أصناف الفاتورة",
+        "create_sales_return": "مرتجع مبيعات",
+        "list_purchase_invoices": "عرض فواتير المشتريات",
+        "get_purchase_invoice": "عرض فاتورة مشتريات",
+        "get_purchase_items": "أصناف فاتورة المشتريات",
+        "create_purchase_invoice": "إنشاء فاتورة مشتريات",
+        "create_purchase_return": "مرتجع مشتريات",
+        "create_supplier": "إنشاء مورد",
+        "update_supplier": "تعديل مورد",
+        "search_suppliers": "بحث موردين",
+        "create_product": "إنشاء منتج",
+        "update_product": "تعديل منتج",
+        "get_product": "عرض تفاصيل منتج",
     }
     return labels.get(tool, tool)
 
@@ -161,7 +209,55 @@ def _describe_execution(tool: str, tool_input: dict, result_summary: str) -> str
         return f"رد مبلغ {amount} جنيه"
     elif tool == "confirm_transaction":
         return "تم تأكيد عملية معلقة"
-    elif tool.startswith("get_"):
+    # Extended tool descriptions
+    elif tool == "create_expense":
+        name = tool_input.get("name", "")
+        amount = tool_input.get("amount", 0)
+        return f"تسجيل مصروف '{name}' بمبلغ {amount} جنيه"
+    elif tool == "set_customer_opening_balance":
+        cid = tool_input.get("customer_id", "")
+        amount = tool_input.get("amount", 0)
+        return f"رصيد أول المدة {amount} جنيه للعميل #{cid}"
+    elif tool == "set_supplier_opening_balance":
+        sid = tool_input.get("supplier_id", "")
+        amount = tool_input.get("amount", 0)
+        return f"رصيد أول المدة {amount} جنيه للمورد #{sid}"
+    elif tool == "set_cash_opening_balance":
+        amount = tool_input.get("amount", 0)
+        return f"رصيد صندوق أول المدة {amount} جنيه"
+    elif tool == "set_opening_inventory":
+        pid = tool_input.get("product_id", "")
+        qty = tool_input.get("quantity", 0)
+        return f"جرد أول المدة: {qty} وحدة من المنتج #{pid}"
+    elif tool == "create_purchase_invoice":
+        items_count = len(tool_input.get("items", []))
+        return f"إنشاء فاتورة مشتريات بـ {items_count} أصناف"
+    elif tool == "create_sales_return":
+        items_count = len(tool_input.get("items", []))
+        inv_id = tool_input.get("invoice_id", "")
+        return f"مرتجع {items_count} أصناف من الفاتورة #{inv_id}"
+    elif tool == "create_purchase_return":
+        items_count = len(tool_input.get("items", []))
+        return f"مرتجع مشتريات: {items_count} أصناف"
+    elif tool == "create_supplier":
+        name = tool_input.get("name", "")
+        return f"إنشاء مورد: {name}"
+    elif tool == "update_supplier":
+        sid = tool_input.get("supplier_id", "")
+        return f"تعديل المورد #{sid}"
+    elif tool == "search_suppliers":
+        query = tool_input.get("query", "")
+        return f'بحث موردين: "{query}"'
+    elif tool == "create_product":
+        name = tool_input.get("name", "")
+        return f"إنشاء منتج: {name}"
+    elif tool == "update_product":
+        pid = tool_input.get("product_id", "")
+        return f"تعديل المنتج #{pid}"
+    elif tool == "get_product":
+        pid = tool_input.get("product_id", "")
+        return f"عرض تفاصيل المنتج #{pid}"
+    elif tool.startswith("get_") or tool.startswith("list_"):
         return "تم الاستعلام بنجاح"
     return "تم التنفيذ"
 

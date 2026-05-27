@@ -24,6 +24,17 @@ SENSITIVE_OPERATIONS = {
     "adjust_stock",
     "transfer_stock",
     "update_stock",
+    # Extended write operations
+    "set_customer_opening_balance",
+    "set_supplier_opening_balance",
+    "set_cash_opening_balance",
+    "set_opening_inventory",
+    "create_expense",
+    "create_sales_return",
+    "create_purchase_invoice",
+    "create_purchase_return",
+    "create_supplier",
+    "create_product",
 }
 
 # Thresholds that trigger mandatory confirmation
@@ -33,6 +44,14 @@ CONFIRMATION_THRESHOLDS = {
     "refund_payment": lambda params: params.get("amount", 0) > 1000,
     "transfer_stock": lambda params: params.get("quantity", 0) > 100,
     "adjust_stock": lambda params: True,  # always confirm stock adjustments
+    "set_customer_opening_balance": lambda params: params.get("amount", 0) > 10000,
+    "set_supplier_opening_balance": lambda params: params.get("amount", 0) > 10000,
+    "set_cash_opening_balance": lambda params: params.get("amount", 0) > 50000,
+    "set_opening_inventory": lambda params: params.get("quantity", 0) * params.get("cost_per_unit", 0) > 20000,
+    "create_expense": lambda params: params.get("amount", 0) > 5000,
+    "create_purchase_invoice": lambda params: sum(i.get("quantity", 0) * i.get("purchase_price", 0) for i in params.get("items", [])) > 10000,
+    "create_sales_return": lambda params: True,  # always confirm returns
+    "create_purchase_return": lambda params: True,  # always confirm returns
 }
 
 PENDING_KEY_PREFIX = "ai:pending_tx:"
@@ -89,6 +108,24 @@ class TransactionGuard:
 
         elif tool_name in ("transfer_stock", "update_stock", "adjust_stock"):
             preview["quantity"] = params.get("quantity", params.get("new_quantity", 0))
+
+        elif tool_name == "create_expense":
+            preview["amount"] = params.get("amount", 0)
+            preview["category"] = params.get("category", "Miscellaneous")
+
+        elif tool_name == "create_purchase_invoice":
+            preview["item_count"] = len(params.get("items", []))
+            preview["estimated_total"] = sum(
+                i.get("quantity", 0) * i.get("purchase_price", 0)
+                for i in params.get("items", [])
+            )
+
+        elif tool_name in ("set_customer_opening_balance", "set_supplier_opening_balance", "set_cash_opening_balance"):
+            preview["amount"] = params.get("amount", 0)
+
+        elif tool_name == "set_opening_inventory":
+            preview["quantity"] = params.get("quantity", 0)
+            preview["total_value"] = params.get("quantity", 0) * params.get("cost_per_unit", 0)
 
         return preview
 
@@ -170,6 +207,19 @@ class TransactionGuard:
             "adjust_stock": lambda p: f"تعديل مخزون منتج {p.get('product_id')} إلى {p.get('new_quantity')} وحدة",
             "create_customer": lambda p: f"إنشاء عميل جديد: {p.get('name')}",
             "update_customer": lambda p: f"تعديل بيانات العميل {p.get('customer_id')}",
+            # Extended operations
+            "set_customer_opening_balance": lambda p: f"تسجيل رصيد أول المدة {p.get('amount')} جنيه للعميل #{p.get('customer_id')}",
+            "set_supplier_opening_balance": lambda p: f"تسجيل رصيد أول المدة {p.get('amount')} جنيه للمورد #{p.get('supplier_id')}",
+            "set_cash_opening_balance": lambda p: f"تسجيل رصيد الصندوق أول المدة {p.get('amount')} جنيه",
+            "set_opening_inventory": lambda p: f"تسجيل مخزون أول المدة: {p.get('quantity')} وحدة من المنتج #{p.get('product_id')}",
+            "create_expense": lambda p: f"تسجيل مصروف '{p.get('name')}' بمبلغ {p.get('amount')} جنيه",
+            "create_sales_return": lambda p: f"مرتجع مبيعات من الفاتورة #{p.get('invoice_id')} ({len(p.get('items', []))} أصناف)",
+            "create_purchase_invoice": lambda p: f"فاتورة مشتريات بـ {len(p.get('items', []))} أصناف للمورد #{p.get('supplier_id')}",
+            "create_purchase_return": lambda p: f"مرتجع مشتريات من الفاتورة #{p.get('purchase_invoice_id')} ({len(p.get('items', []))} أصناف)",
+            "create_supplier": lambda p: f"إنشاء مورد جديد: {p.get('name')}",
+            "update_supplier": lambda p: f"تعديل بيانات المورد #{p.get('supplier_id')}",
+            "create_product": lambda p: f"إنشاء منتج جديد: {p.get('name')}",
+            "update_product": lambda p: f"تعديل بيانات المنتج #{p.get('product_id')}",
         }
         fn = descriptions.get(tool_name)
         return fn(params) if fn else f"تنفيذ {tool_name}"
@@ -196,5 +246,14 @@ class TransactionGuard:
                 "quantity": params.get("quantity"),
                 "notes": "rollback",
             }}
+
+        elif tool_name == "create_purchase_invoice":
+            purchase_invoice_id = result.get("purchase_invoice_id")
+            if purchase_invoice_id:
+                return {"tool": "create_purchase_return", "params": {
+                    "purchase_invoice_id": purchase_invoice_id,
+                    "items": params.get("items", []),
+                    "reason": "rollback",
+                }}
 
         return None

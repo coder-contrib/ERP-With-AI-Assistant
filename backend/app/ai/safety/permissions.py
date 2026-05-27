@@ -44,11 +44,24 @@ ROLE_AI_TOOLS = {
             "get_profit_and_loss", "get_cash_balance", "get_receivables_summary",
             "get_payables_summary", "get_expense_breakdown", "get_daily_revenue",
             "demand_forecast", "search_products", "search_customers",
+            # Extended read tools
+            "get_opening_balances", "list_expenses", "get_expense_summary",
+            "list_sales_invoices", "get_sales_invoice", "get_invoice_items",
+            "list_purchase_invoices", "get_purchase_invoice", "get_purchase_items",
+            "search_suppliers", "get_product",
             # Write tools
             "create_invoice", "cancel_invoice", "apply_discount",
             "record_payment", "refund_payment",
             "update_stock", "transfer_stock", "adjust_stock",
             "create_customer", "update_customer",
+            # Extended write tools
+            "set_customer_opening_balance", "set_supplier_opening_balance",
+            "set_cash_opening_balance", "set_opening_inventory",
+            "create_expense",
+            "create_sales_return",
+            "create_purchase_invoice", "create_purchase_return",
+            "create_supplier", "update_supplier",
+            "create_product", "update_product",
             "confirm_transaction",
         ],
     },
@@ -58,15 +71,24 @@ ROLE_AI_TOOLS = {
             "get_today_sales", "get_customer_info", "get_customer_history",
             "get_unpaid_invoices", "get_stock_level",
             "search_products", "search_customers",
+            # Extended read
+            "list_sales_invoices", "get_sales_invoice", "get_invoice_items",
+            "get_expense_summary", "get_product",
             # Write
             "create_invoice", "apply_discount",
             "record_payment",
             "create_customer", "update_customer",
+            "create_expense",
             "confirm_transaction",
         ],
         "blocked": [
             "cancel_invoice", "refund_payment", "adjust_stock",
             "transfer_stock", "update_stock",
+            "set_customer_opening_balance", "set_supplier_opening_balance",
+            "set_cash_opening_balance", "set_opening_inventory",
+            "create_purchase_invoice", "create_purchase_return",
+            "create_supplier", "update_supplier",
+            "create_product", "update_product",
         ],
     },
     "warehouse_employee": {
@@ -74,15 +96,23 @@ ROLE_AI_TOOLS = {
             # Read
             "get_stock_level", "get_low_stock_items", "get_stock_movement_history",
             "get_warehouse_summary", "get_dead_stock", "get_stock_valuation",
-            "search_products",
+            "search_products", "get_product",
+            # Extended read
+            "list_purchase_invoices", "get_purchase_invoice", "get_purchase_items",
+            "search_suppliers",
             # Write
             "update_stock", "transfer_stock",
+            "set_opening_inventory",
             "confirm_transaction",
         ],
         "blocked": [
             "create_invoice", "cancel_invoice", "record_payment",
             "refund_payment", "adjust_stock",
             "create_customer", "update_customer",
+            "set_customer_opening_balance", "set_supplier_opening_balance",
+            "set_cash_opening_balance",
+            "create_expense",
+            "create_purchase_invoice", "create_purchase_return",
         ],
     },
     "accountant": {
@@ -94,14 +124,26 @@ ROLE_AI_TOOLS = {
             "get_profit_and_loss", "get_cash_balance", "get_receivables_summary",
             "get_payables_summary", "get_expense_breakdown", "get_daily_revenue",
             "demand_forecast", "search_products", "search_customers",
+            # Extended read
+            "get_opening_balances", "list_expenses", "get_expense_summary",
+            "list_sales_invoices", "get_sales_invoice", "get_invoice_items",
+            "list_purchase_invoices", "get_purchase_invoice", "get_purchase_items",
+            "search_suppliers", "get_product",
             # Limited write
             "record_payment",
+            "set_customer_opening_balance", "set_supplier_opening_balance",
+            "set_cash_opening_balance", "set_opening_inventory",
+            "create_expense",
             "confirm_transaction",
         ],
         "blocked": [
             "create_invoice", "cancel_invoice", "refund_payment",
             "update_stock", "transfer_stock", "adjust_stock",
             "create_customer",
+            "create_purchase_invoice", "create_purchase_return",
+            "create_sales_return",
+            "create_supplier", "update_supplier",
+            "create_product", "update_product",
         ],
     },
     # Default for AI when no user context is available
@@ -112,6 +154,11 @@ ROLE_AI_TOOLS = {
             "get_stock_level", "get_low_stock_items",
             "get_cash_balance", "get_receivables_summary",
             "search_products", "search_customers",
+            # Extended read (safe)
+            "get_opening_balances", "list_expenses", "get_expense_summary",
+            "list_sales_invoices", "get_sales_invoice", "get_invoice_items",
+            "list_purchase_invoices", "get_purchase_invoice", "get_purchase_items",
+            "search_suppliers", "get_product",
         ],
         "blocked": "*_write",
     },

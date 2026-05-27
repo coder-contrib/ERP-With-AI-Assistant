@@ -15,6 +15,12 @@ FINANCIAL_TOOLS = {
     "record_payment": lambda p: p.get("amount", 0),
     "refund_payment": lambda p: p.get("amount", 0),
     "apply_discount": lambda p: p.get("discount_amount", 0),
+    "create_expense": lambda p: p.get("amount", 0),
+    "create_purchase_invoice": lambda p: sum(i.get("quantity", 0) * i.get("purchase_price", 0) for i in p.get("items", [])),
+    "set_customer_opening_balance": lambda p: p.get("amount", 0),
+    "set_supplier_opening_balance": lambda p: p.get("amount", 0),
+    "set_cash_opening_balance": lambda p: p.get("amount", 0),
+    "set_opening_inventory": lambda p: p.get("quantity", 0) * p.get("cost_per_unit", 0),
 }
 
 
@@ -54,6 +60,7 @@ class ToolExecutor:
         from app.ai.tools.finance_tools import FinanceTools
         from app.ai.tools.reporting_tools import ReportingTools
         from app.ai.tools.action_tools import ActionTools
+        from app.ai.tools.extended_tools import ExtendedTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
@@ -61,6 +68,7 @@ class ToolExecutor:
         finance = FinanceTools(self.db)
         reporting = ReportingTools(self.db)
         actions = ActionTools(self.db)
+        extended = ExtendedTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         return {
@@ -147,6 +155,121 @@ class ToolExecutor:
                 payment_terms=p.get("payment_terms"),
                 notes=p.get("notes"),
             ),
+            # --- Extended: Opening Balances ---
+            "set_customer_opening_balance": lambda **p: extended.set_customer_opening_balance(
+                customer_id=p["customer_id"],
+                amount=p["amount"],
+                balance_type=p.get("balance_type", "debit"),
+                notes=p.get("notes"),
+            ),
+            "set_supplier_opening_balance": lambda **p: extended.set_supplier_opening_balance(
+                supplier_id=p["supplier_id"],
+                amount=p["amount"],
+                balance_type=p.get("balance_type", "credit"),
+                notes=p.get("notes"),
+            ),
+            "set_cash_opening_balance": lambda **p: extended.set_cash_opening_balance(
+                amount=p["amount"],
+                account_name=p.get("account_name", "الصندوق الرئيسي"),
+                notes=p.get("notes"),
+            ),
+            "set_opening_inventory": lambda **p: extended.set_opening_inventory(
+                product_id=p["product_id"],
+                warehouse_id=p["warehouse_id"],
+                quantity=p["quantity"],
+                cost_per_unit=p["cost_per_unit"],
+                notes=p.get("notes"),
+            ),
+            "get_opening_balances": lambda **p: extended.get_opening_balances(
+                entity_type=p.get("entity_type"),
+            ),
+            # --- Extended: Expenses ---
+            "create_expense": lambda **p: extended.create_expense(
+                name=p["name"],
+                amount=p["amount"],
+                category=p.get("category", "Miscellaneous"),
+                notes=p.get("notes"),
+                expense_date=p.get("expense_date"),
+            ),
+            "list_expenses": lambda **p: extended.list_expenses(
+                date_from=p.get("date_from"),
+                date_to=p.get("date_to"),
+                category=p.get("category"),
+                search=p.get("search"),
+                limit=p.get("limit", 20),
+            ),
+            "get_expense_summary": lambda **_: extended.get_expense_summary(),
+            # --- Extended: Sales Invoice Retrieval ---
+            "list_sales_invoices": lambda **p: extended.list_sales_invoices(
+                limit=p.get("limit", 20),
+                status=p.get("status"),
+            ),
+            "get_sales_invoice": lambda **p: extended.get_sales_invoice(p["invoice_id"]),
+            "get_invoice_items": lambda **p: extended.get_invoice_items(p["invoice_id"]),
+            "create_sales_return": lambda **p: extended.create_sales_return(
+                invoice_id=p["invoice_id"],
+                items=p["items"],
+                reason=p.get("reason"),
+            ),
+            # --- Extended: Purchase Invoices ---
+            "list_purchase_invoices": lambda **p: extended.list_purchase_invoices(
+                limit=p.get("limit", 20),
+            ),
+            "get_purchase_invoice": lambda **p: extended.get_purchase_invoice(p["purchase_invoice_id"]),
+            "get_purchase_items": lambda **p: extended.get_purchase_items(p["purchase_invoice_id"]),
+            "create_purchase_invoice": lambda **p: extended.create_purchase_invoice(
+                supplier_id=p["supplier_id"],
+                items=p["items"],
+                payment_type=p.get("payment_type", "cash"),
+                paid_amount=p.get("paid_amount"),
+                warehouse_id=p.get("warehouse_id", 1),
+                notes=p.get("notes"),
+            ),
+            "create_purchase_return": lambda **p: extended.create_purchase_return(
+                purchase_invoice_id=p["purchase_invoice_id"],
+                items=p["items"],
+                reason=p.get("reason"),
+            ),
+            # --- Extended: Suppliers ---
+            "create_supplier": lambda **p: extended.create_supplier(
+                name=p["name"],
+                phone=p.get("phone"),
+                address=p.get("address"),
+                notes=p.get("notes"),
+            ),
+            "update_supplier": lambda **p: extended.update_supplier(
+                supplier_id=p["supplier_id"],
+                name=p.get("name"),
+                phone=p.get("phone"),
+                address=p.get("address"),
+                notes=p.get("notes"),
+            ),
+            "search_suppliers": lambda **p: extended.search_suppliers(
+                query=p["query"],
+                limit=p.get("limit", 10),
+            ),
+            # --- Extended: Products ---
+            "create_product": lambda **p: extended.create_product(
+                name=p["name"],
+                sku=p.get("sku"),
+                category_id=p.get("category_id"),
+                selling_price=p.get("selling_price", 0),
+                cost_price=p.get("cost_price", 0),
+                base_unit=p.get("base_unit", "meter"),
+                barcode=p.get("barcode"),
+                notes=p.get("notes"),
+            ),
+            "update_product": lambda **p: extended.update_product(
+                product_id=p["product_id"],
+                name=p.get("name"),
+                selling_price=p.get("selling_price"),
+                cost_price=p.get("cost_price"),
+                category_id=p.get("category_id"),
+                base_unit=p.get("base_unit"),
+                barcode=p.get("barcode"),
+                notes=p.get("notes"),
+            ),
+            "get_product": lambda **p: extended.get_product(p["product_id"]),
             # --- Safety: Confirmation ---
             "confirm_transaction": lambda **p: self._confirm_transaction(p["confirmation_id"]),
         }
@@ -317,6 +440,29 @@ class ToolExecutor:
                     customer_id=customer_id,
                     name=name,
                     fact=f"عميل جديد. تليفون: {phone}. عنوان: {address}",
+                )
+            elif tool_name == "create_purchase_invoice":
+                self.vector_memory.store_transaction_fact(
+                    customer_id=params.get("supplier_id", 0),
+                    customer_name=f"مورد #{params.get('supplier_id', 0)}",
+                    action="فاتورة مشتريات",
+                    details={
+                        "purchase_invoice_id": result.get("purchase_invoice_id"),
+                        "total": result.get("total_amount", 0),
+                        "items_count": len(params.get("items", [])),
+                    },
+                )
+            elif tool_name == "create_expense":
+                self.vector_memory.store_transaction_fact(
+                    customer_id=0,
+                    customer_name="مصروفات",
+                    action="مصروف جديد",
+                    details={
+                        "expense_id": result.get("expense_id"),
+                        "name": params.get("name"),
+                        "amount": params.get("amount", 0),
+                        "category": params.get("category"),
+                    },
                 )
         except Exception as e:
             logger.warning(f"Memory store failed (non-critical): {e}")
