@@ -82,7 +82,6 @@ class NotificationService:
                 Notification.notification_type == "low_stock",
                 Notification.entity_type == "product",
                 Notification.entity_id == r.product_id,
-                Notification.is_read == False,
             ).first()
             if not existing:
                 self.create(
@@ -109,7 +108,6 @@ class NotificationService:
                 Notification.notification_type == "credit_limit_exceeded",
                 Notification.entity_type == "customer",
                 Notification.entity_id == c.customer_id,
-                Notification.is_read == False,
             ).first()
             if not existing:
                 over = c.current_balance - c.credit_limit
@@ -144,7 +142,6 @@ class NotificationService:
                     Notification.notification_type == "overdue_supplier",
                     Notification.entity_type == "supplier",
                     Notification.entity_id == s.supplier_id,
-                    Notification.is_read == False,
                 ).first()
                 if not existing:
                     self.create(
