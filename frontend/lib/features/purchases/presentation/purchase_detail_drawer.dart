@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/print_helper.dart';
+import '../../../core/widgets/validation_error_banner.dart';
 import '../data/purchases_repository.dart';
 
 class PurchaseDetailDrawer extends ConsumerStatefulWidget {
@@ -62,7 +63,6 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
     });
     final repo = ref.read(purchasesRepositoryProvider);
 
-    // Load each independently so one failure doesn't block the others
     try {
       final items = await repo.getItems(widget.invoice.purchaseInvoiceId);
       if (mounted) setState(() => _items = items);
@@ -628,13 +628,17 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
 
   void _returnItems(PurchaseInvoiceModel inv) {
     if (_items.isEmpty) {
-      _showStyledSnackBar(context, 'No items loaded yet. Please wait.', type: _SnackType.warning);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No items loaded yet. Please wait.'), backgroundColor: AppColors.warning),
+      );
       return;
     }
 
     final returnableItems = _items.where((item) => item.returnableQuantity > 0).toList();
     if (returnableItems.isEmpty) {
-      _showStyledSnackBar(context, 'All items have already been returned', type: _SnackType.warning);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All items have already been returned'), backgroundColor: AppColors.warning),
+      );
       return;
     }
 
@@ -656,12 +660,16 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
             widget.onPaymentRecorded();
             _loadData();
             if (mounted) {
-              _showStyledSnackBar(context, 'Return processed successfully', type: _SnackType.success);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Return processed successfully'), backgroundColor: AppColors.success),
+              );
             }
           } catch (e) {
             final errorMsg = e.toString().replaceFirst('Exception: ', '');
             if (ctx.mounted) {
-              _showStyledSnackBar(ctx, errorMsg, type: _SnackType.error);
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(content: Text(errorMsg), backgroundColor: AppColors.error),
+              );
             }
           }
         },
@@ -717,64 +725,22 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
                 if (ctx.mounted) Navigator.pop(ctx);
                 widget.onPaymentRecorded();
                 if (mounted) {
-                  _showStyledSnackBar(context, 'Payment of ${amount.toStringAsFixed(2)} IQD recorded successfully', type: _SnackType.success);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Payment of ${amount.toStringAsFixed(2)} IQD recorded successfully'), backgroundColor: AppColors.success),
+                  );
                 }
               } catch (e) {
                 final errorMsg = e.toString().replaceFirst('Exception: ', '');
                 if (ctx.mounted) {
-                  _showStyledSnackBar(ctx, errorMsg, type: _SnackType.error);
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(errorMsg), backgroundColor: AppColors.error),
+                  );
                 }
               }
             },
             child: const Text('Record'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showStyledSnackBar(BuildContext ctx, String message, {required _SnackType type}) {
-    final (Color bg, Color iconColor, IconData icon) = switch (type) {
-      _SnackType.success => (const Color(0xFFECFDF5), AppColors.success, Icons.check_circle_rounded),
-      _SnackType.error => (const Color(0xFFFEF2F2), AppColors.error, Icons.error_rounded),
-      _SnackType.warning => (const Color(0xFFFFFBEB), AppColors.warning, Icons.warning_amber_rounded),
-    };
-
-    ScaffoldMessenger.of(ctx).clearSnackBars();
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: iconColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: bg,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: iconColor.withOpacity(0.3)),
-        ),
-        elevation: 4,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        duration: type == _SnackType.error ? const Duration(seconds: 5) : const Duration(seconds: 3),
       ),
     );
   }
@@ -788,8 +754,6 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
     }
   }
 }
-
-enum _SnackType { success, error, warning }
 
 
 class _PurchaseReturnItemsDialog extends StatefulWidget {
@@ -809,6 +773,7 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
   final _notesController = TextEditingController();
   bool _refundCash = false;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -837,17 +802,21 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
     return total;
   }
 
+  void _clearError() {
+    setState(() => _errorMessage = null);
+  }
+
   Future<void> _submit() async {
+    _clearError();
     final returnItems = <Map<String, dynamic>>[];
     for (int i = 0; i < widget.items.length; i++) {
       if (!_selected[i]) continue;
       final qty = double.tryParse(_qtyControllers[i].text) ?? 0;
       if (qty <= 0) continue;
       if (qty > widget.items[i].returnableQuantity) {
-        _showDialogSnackBar(
-          '${widget.items[i].productName}: return qty exceeds returnable qty (${widget.items[i].returnableQuantity})',
-          type: _SnackType.error,
-        );
+        setState(() {
+          _errorMessage = 'Cannot return ${qty % 1 == 0 ? qty.toInt() : qty.toStringAsFixed(2)} of "${widget.items[i].productName}" — only ${widget.items[i].returnableQuantity % 1 == 0 ? widget.items[i].returnableQuantity.toInt() : widget.items[i].returnableQuantity.toStringAsFixed(2)} available for return.';
+        });
         return;
       }
       final total = qty * widget.items[i].purchasePrice;
@@ -860,7 +829,7 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
     }
 
     if (returnItems.isEmpty) {
-      _showDialogSnackBar('Select at least one item to return', type: _SnackType.warning);
+      setState(() => _errorMessage = 'Please select at least one item and specify a quantity to return.');
       return;
     }
 
@@ -869,52 +838,6 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
     final notes = _notesController.text.trim().isEmpty ? null : _notesController.text.trim();
     await widget.onSubmit(returnItems, refund, notes);
     if (mounted) setState(() => _isLoading = false);
-  }
-
-  void _showDialogSnackBar(String message, {required _SnackType type}) {
-    final (Color bg, Color iconColor, IconData icon) = switch (type) {
-      _SnackType.success => (const Color(0xFFECFDF5), AppColors.success, Icons.check_circle_rounded),
-      _SnackType.error => (const Color(0xFFFEF2F2), AppColors.error, Icons.error_rounded),
-      _SnackType.warning => (const Color(0xFFFFFBEB), AppColors.warning, Icons.warning_amber_rounded),
-    };
-
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: iconColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: bg,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: iconColor.withOpacity(0.3)),
-        ),
-        elevation: 4,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        duration: type == _SnackType.error ? const Duration(seconds: 5) : const Duration(seconds: 3),
-      ),
-    );
   }
 
   @override
@@ -956,6 +879,10 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    ValidationErrorBanner(
+                      message: _errorMessage,
+                      onDismiss: _clearError,
+                    ),
                     const Text('Select items to return:', style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
                     ...widget.items.asMap().entries.map((entry) {
@@ -973,7 +900,10 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
                           children: [
                             Checkbox(
                               value: _selected[i],
-                              onChanged: (v) => setState(() => _selected[i] = v ?? false),
+                              onChanged: (v) {
+                                setState(() => _selected[i] = v ?? false);
+                                _clearError();
+                              },
                               activeColor: AppColors.warning,
                             ),
                             Expanded(
@@ -998,7 +928,10 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
                                     isDense: true,
                                     contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                   ),
-                                  onChanged: (_) => setState(() {}),
+                                  onChanged: (_) {
+                                    setState(() {});
+                                    _clearError();
+                                  },
                                 ),
                               ),
                           ],
