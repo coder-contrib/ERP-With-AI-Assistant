@@ -10,9 +10,10 @@ class VoiceOrchestrator:
     Takes transcribed text, sends to the Manager, returns response + tools used.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_role: str = "ai_agent"):
         self.db = db
-        self.manager = ManagerAgent(db)
+        self.user_role = user_role
+        self.manager = ManagerAgent(db, user_role=user_role)
 
     def process_voice_message(self, session_id: str, text: str, priority: str = "normal") -> dict:
         """Process a voice message through the Manager Agent.
@@ -21,8 +22,7 @@ class VoiceOrchestrator:
             session_id: Conversation session ID
             text: Transcribed user speech
             priority: "high" if this follows a barge-in (user interrupted AI),
-                      "normal" otherwise. High priority prepends context so the
-                      AI treats this as a fresh intent, not a continuation.
+                      "normal" otherwise.
 
         Returns: {text: str, tools_used: list[str]}
         """
@@ -30,7 +30,6 @@ class VoiceOrchestrator:
             return {"text": "لم أسمع شيء. جرب تاني.", "tools_used": []}
 
         try:
-            # If high priority (post-interrupt), prepend context to signal fresh intent
             if priority == "high":
                 prefixed_text = f"[المستخدم قاطعك - تجاهل ردك السابق وركز على الطلب الجديد] {text}"
             else:
@@ -56,7 +55,7 @@ class VoiceOrchestrator:
             history = memory.get_context_window(max_messages=10)
             tools = []
             for msg in reversed(history):
-                if msg.get("role") == "tool_result":
+                if msg.get("role") == "tool":
                     tool_name = msg.get("tool_name", "")
                     if tool_name:
                         tools.append(tool_name)
