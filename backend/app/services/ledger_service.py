@@ -69,6 +69,20 @@ class LedgerService:
                 self._entry(ACCOUNT_CODES["accounts_payable"], debit=Decimal("0"), credit=payable,
                             entity_type="purchase_invoice", entity_id=purchase_invoice_id, description="Purchase on credit")
 
+    def record_purchase_return(self, return_id: int, returned_amount: Decimal,
+                               refund_amount: Decimal):
+        self._entry(ACCOUNT_CODES["purchase_returns"], debit=Decimal("0"), credit=returned_amount,
+                    entity_type="purchase_return", entity_id=return_id, description="Purchase return")
+        self._entry(ACCOUNT_CODES["inventory"], debit=Decimal("0"), credit=returned_amount,
+                    entity_type="purchase_return", entity_id=return_id, description="Inventory reduced by purchase return")
+        if refund_amount > 0:
+            self._entry(ACCOUNT_CODES["cash"], debit=refund_amount, credit=Decimal("0"),
+                        entity_type="purchase_return", entity_id=return_id, description="Cash refund from supplier")
+        credit_portion = returned_amount - refund_amount
+        if credit_portion > 0:
+            self._entry(ACCOUNT_CODES["accounts_payable"], debit=credit_portion, credit=Decimal("0"),
+                        entity_type="purchase_return", entity_id=return_id, description="Payable reduced by return")
+
     def record_customer_payment(self, payment_id: int, amount: Decimal):
         self._entry(ACCOUNT_CODES["cash"], debit=amount, credit=Decimal("0"),
                     entity_type="customer_payment", entity_id=payment_id, description="Customer payment received")
