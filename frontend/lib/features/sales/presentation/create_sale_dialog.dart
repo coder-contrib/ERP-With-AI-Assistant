@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/validation_error_banner.dart';
 import '../../customers/data/customers_repository.dart';
 import '../../products/data/products_repository.dart';
 import '../data/sales_repository.dart';
@@ -26,10 +27,15 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
   final _paidController = TextEditingController();
   final _notesController = TextEditingController();
   bool _submitting = false;
+  String? _errorMessage;
 
   double get _subtotal => _items.fold(0, (sum, item) => sum + item.lineTotal);
   double get _discountTotal => double.tryParse(_discountController.text) ?? 0;
   double get _total => _subtotal - _discountTotal;
+
+  void _clearError() {
+    if (_errorMessage != null) setState(() => _errorMessage = null);
+  }
 
   @override
   void dispose() {
@@ -54,7 +60,12 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
             _buildHeader(),
             const SizedBox(height: 8),
             _buildStepIndicator(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            ValidationErrorBanner(
+              message: _errorMessage,
+              onDismiss: _clearError,
+            ),
+            const SizedBox(height: 8),
             Flexible(child: _buildCurrentStep()),
             const SizedBox(height: 16),
             _buildBottomActions(),
@@ -130,7 +141,10 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
             title: const Text('Walk-in Customer'),
             subtitle: const Text('No specific customer account'),
             value: _isWalkIn,
-            onChanged: (v) => setState(() { _isWalkIn = v ?? false; if (_isWalkIn) _selectedCustomerId = null; }),
+            onChanged: (v) {
+              setState(() { _isWalkIn = v ?? false; if (_isWalkIn) _selectedCustomerId = null; });
+              _clearError();
+            },
             controlAffinity: ListTileControlAffinity.leading,
           ),
           if (!_isWalkIn) ...[
@@ -142,7 +156,10 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
                 value: _selectedCustomerId,
                 decoration: const InputDecoration(labelText: 'Customer', hintText: 'Select a customer'),
                 items: customers.map((c) => DropdownMenuItem(value: c.customerId, child: Text(c.customerName))).toList(),
-                onChanged: (v) => setState(() => _selectedCustomerId = v),
+                onChanged: (v) {
+                  setState(() => _selectedCustomerId = v);
+                  _clearError();
+                },
               ),
             ),
           ],
@@ -443,6 +460,7 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
 
   Future<void> _submit() async {
     setState(() => _submitting = true);
+    _clearError();
     try {
       final paidAmount = double.tryParse(_paidController.text) ?? (_invoiceType == 'cash' ? _total : 0);
       final invoiceNumber = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
@@ -472,7 +490,9 @@ class _CreateSaleDialogState extends ConsumerState<CreateSaleDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error creating invoice: $e')));
+        setState(() {
+          _errorMessage = 'Error creating invoice: $e';
+        });
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
