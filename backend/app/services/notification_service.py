@@ -62,7 +62,16 @@ class NotificationService:
         self.db.flush()
         return notif
 
+    def _clear_unread_by_type(self, notification_type: str):
+        self.db.query(Notification).filter(
+            Notification.notification_type == notification_type,
+            Notification.is_read == False,
+        ).delete()
+        self.db.flush()
+
     def check_low_stock(self, threshold: float = 10.0) -> int:
+        self._clear_unread_by_type("low_stock")
+
         results = self.db.query(
             InventoryCache.product_id,
             Product.product_name,
@@ -76,27 +85,27 @@ class NotificationService:
             InventoryCache.cached_quantity > 0,
         ).all()
 
+        seen_products = set()
         count = 0
         for r in results:
-            existing = self.db.query(Notification).filter(
-                Notification.notification_type == "low_stock",
-                Notification.entity_type == "product",
-                Notification.entity_id == r.product_id,
-            ).first()
-            if not existing:
-                self.create(
-                    notification_type="low_stock",
-                    severity="warning",
-                    title=f"Low stock: {r.product_name}",
-                    message=f"{r.product_name} has only {r.cached_quantity} units left in {r.warehouse_name}",
-                    entity_type="product",
-                    entity_id=r.product_id,
-                )
-                count += 1
+            if r.product_id in seen_products:
+                continue
+            seen_products.add(r.product_id)
+            self.create(
+                notification_type="low_stock",
+                severity="warning",
+                title=f"Low stock: {r.product_name}",
+                message=f"{r.product_name} has only {r.cached_quantity} units left in {r.warehouse_name}",
+                entity_type="product",
+                entity_id=r.product_id,
+            )
+            count += 1
         self.db.commit()
         return count
 
     def check_credit_limit_exceeded(self) -> int:
+        self._clear_unread_by_type("credit_limit_exceeded")
+
         results = self.db.query(Customer).filter(
             Customer.credit_limit > 0,
             Customer.current_balance > Customer.credit_limit,
@@ -104,26 +113,22 @@ class NotificationService:
 
         count = 0
         for c in results:
-            existing = self.db.query(Notification).filter(
-                Notification.notification_type == "credit_limit_exceeded",
-                Notification.entity_type == "customer",
-                Notification.entity_id == c.customer_id,
-            ).first()
-            if not existing:
-                over = c.current_balance - c.credit_limit
-                self.create(
-                    notification_type="credit_limit_exceeded",
-                    severity="critical",
-                    title=f"Credit limit exceeded: {c.customer_name}",
-                    message=f"{c.customer_name} is over limit by {over}. Balance: {c.current_balance}, Limit: {c.credit_limit}",
-                    entity_type="customer",
-                    entity_id=c.customer_id,
-                )
-                count += 1
+            over = c.current_balance - c.credit_limit
+            self.create(
+                notification_type="credit_limit_exceeded",
+                severity="critical",
+                title=f"Credit limit exceeded: {c.customer_name}",
+                message=f"{c.customer_name} is over limit by {over}. Balance: {c.current_balance}, Limit: {c.credit_limit}",
+                entity_type="customer",
+                entity_id=c.customer_id,
+            )
+            count += 1
         self.db.commit()
         return count
 
     def check_overdue_supplier_payments(self) -> int:
+        self._clear_unread_by_type("overdue_supplier")
+
         results = self.db.query(Supplier).filter(
             Supplier.current_balance > 0,
             Supplier.payment_terms > 0,
@@ -138,21 +143,15 @@ class NotificationService:
                 days_since = 999
 
             if days_since > s.payment_terms:
-                existing = self.db.query(Notification).filter(
-                    Notification.notification_type == "overdue_supplier",
-                    Notification.entity_type == "supplier",
-                    Notification.entity_id == s.supplier_id,
-                ).first()
-                if not existing:
-                    self.create(
-                        notification_type="overdue_supplier",
-                        severity="warning",
-                        title=f"Overdue payment: {s.supplier_name}",
-                        message=f"Payment to {s.supplier_name} is overdue by {days_since - s.payment_terms} days. Balance: {s.current_balance}",
-                        entity_type="supplier",
-                        entity_id=s.supplier_id,
-                    )
-                    count += 1
+                self.create(
+                    notification_type="overdue_supplier",
+                    severity="warning",
+                    title=f"Overdue payment: {s.supplier_name}",
+                    message=f"Payment to {s.supplier_name} is overdue by {days_since - s.payment_terms} days. Balance: {s.current_balance}",
+                    entity_type="supplier",
+                    entity_id=s.supplier_id,
+                )
+                count += 1
         self.db.commit()
         return count
 
