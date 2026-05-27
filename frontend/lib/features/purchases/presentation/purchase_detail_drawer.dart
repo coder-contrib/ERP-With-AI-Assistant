@@ -628,13 +628,13 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
 
   void _returnItems(PurchaseInvoiceModel inv) {
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No items loaded yet. Please wait.')));
+      _showStyledSnackBar(context, 'No items loaded yet. Please wait.', type: _SnackType.warning);
       return;
     }
 
     final returnableItems = _items.where((item) => item.returnableQuantity > 0).toList();
     if (returnableItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All items have already been returned')));
+      _showStyledSnackBar(context, 'All items have already been returned', type: _SnackType.warning);
       return;
     }
 
@@ -656,13 +656,12 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
             widget.onPaymentRecorded();
             _loadData();
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Return processed successfully')),
-              );
+              _showStyledSnackBar(context, 'Return processed successfully', type: _SnackType.success);
             }
           } catch (e) {
+            final errorMsg = e.toString().replaceFirst('Exception: ', '');
             if (ctx.mounted) {
-              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+              _showStyledSnackBar(ctx, errorMsg, type: _SnackType.error);
             }
           }
         },
@@ -718,22 +717,64 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
                 if (ctx.mounted) Navigator.pop(ctx);
                 widget.onPaymentRecorded();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Payment of ${amount.toStringAsFixed(2)} IQD recorded successfully'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
+                  _showStyledSnackBar(context, 'Payment of ${amount.toStringAsFixed(2)} IQD recorded successfully', type: _SnackType.success);
                 }
               } catch (e) {
+                final errorMsg = e.toString().replaceFirst('Exception: ', '');
                 if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  _showStyledSnackBar(ctx, errorMsg, type: _SnackType.error);
                 }
               }
             },
             child: const Text('Record'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showStyledSnackBar(BuildContext ctx, String message, {required _SnackType type}) {
+    final (Color bg, Color iconColor, IconData icon) = switch (type) {
+      _SnackType.success => (const Color(0xFFECFDF5), AppColors.success, Icons.check_circle_rounded),
+      _SnackType.error => (const Color(0xFFFEF2F2), AppColors.error, Icons.error_rounded),
+      _SnackType.warning => (const Color(0xFFFFFBEB), AppColors.warning, Icons.warning_amber_rounded),
+    };
+
+    ScaffoldMessenger.of(ctx).clearSnackBars();
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: iconColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: iconColor.withOpacity(0.3)),
+        ),
+        elevation: 4,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: type == _SnackType.error ? const Duration(seconds: 5) : const Duration(seconds: 3),
       ),
     );
   }
@@ -747,6 +788,8 @@ class _PurchaseDetailDrawerState extends ConsumerState<PurchaseDetailDrawer> wit
     }
   }
 }
+
+enum _SnackType { success, error, warning }
 
 
 class _PurchaseReturnItemsDialog extends StatefulWidget {
@@ -801,8 +844,9 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
       final qty = double.tryParse(_qtyControllers[i].text) ?? 0;
       if (qty <= 0) continue;
       if (qty > widget.items[i].returnableQuantity) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.items[i].productName}: return qty exceeds returnable qty (${widget.items[i].returnableQuantity})')),
+        _showDialogSnackBar(
+          '${widget.items[i].productName}: return qty exceeds returnable qty (${widget.items[i].returnableQuantity})',
+          type: _SnackType.error,
         );
         return;
       }
@@ -816,9 +860,7 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
     }
 
     if (returnItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one item to return')),
-      );
+      _showDialogSnackBar('Select at least one item to return', type: _SnackType.warning);
       return;
     }
 
@@ -827,6 +869,52 @@ class _PurchaseReturnItemsDialogState extends State<_PurchaseReturnItemsDialog> 
     final notes = _notesController.text.trim().isEmpty ? null : _notesController.text.trim();
     await widget.onSubmit(returnItems, refund, notes);
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  void _showDialogSnackBar(String message, {required _SnackType type}) {
+    final (Color bg, Color iconColor, IconData icon) = switch (type) {
+      _SnackType.success => (const Color(0xFFECFDF5), AppColors.success, Icons.check_circle_rounded),
+      _SnackType.error => (const Color(0xFFFEF2F2), AppColors.error, Icons.error_rounded),
+      _SnackType.warning => (const Color(0xFFFFFBEB), AppColors.warning, Icons.warning_amber_rounded),
+    };
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: iconColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: iconColor.withOpacity(0.3)),
+        ),
+        elevation: 4,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: type == _SnackType.error ? const Duration(seconds: 5) : const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
