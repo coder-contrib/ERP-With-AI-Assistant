@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:record/record.dart';
 import '../data/voice_service.dart';
 import '../data/ai_repository.dart';
 
@@ -16,6 +17,7 @@ class VoiceChatState {
   final String sessionId;
   final bool isConnected;
   final String? errorMessage;
+  final bool isStreaming;
 
   VoiceChatState({
     this.voiceState = VoiceState.idle,
@@ -26,6 +28,7 @@ class VoiceChatState {
     this.sessionId = '',
     this.isConnected = false,
     this.errorMessage,
+    this.isStreaming = false,
   });
 
   VoiceChatState copyWith({
@@ -37,6 +40,7 @@ class VoiceChatState {
     String? sessionId,
     bool? isConnected,
     String? errorMessage,
+    bool? isStreaming,
   }) {
     return VoiceChatState(
       voiceState: voiceState ?? this.voiceState,
@@ -47,6 +51,7 @@ class VoiceChatState {
       sessionId: sessionId ?? this.sessionId,
       isConnected: isConnected ?? this.isConnected,
       errorMessage: errorMessage,
+      isStreaming: isStreaming ?? this.isStreaming,
     );
   }
 }
@@ -58,6 +63,8 @@ final voiceChatProvider = StateNotifierProvider<VoiceChatNotifier, VoiceChatStat
 class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
   final VoiceService _voiceService;
   StreamSubscription? _eventSub;
+  StreamSubscription? _audioStreamSub;
+  final AudioRecorder _recorder = AudioRecorder();
 
   VoiceChatNotifier(this._voiceService) : super(VoiceChatState(
     sessionId: 'voice-${DateTime.now().millisecondsSinceEpoch}',
@@ -68,15 +75,56 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
             'ممكن تسألني:\n'
             '• "كام في الخزنة؟"\n'
             '• "المبيعات عاملة ايه النهارده؟"\n'
-            '• "العميل أحمد مديون بكام؟"',
+            '• "بيع ٥ متر سيراميك لأحمد"',
       ),
     ],
   ));
 
-  void connectWebSocket() {
+  /// Start live streaming mode: audio is streamed in real-time for transcription
+  Future<void> startStreaming() async {
+    // Connect WebSocket
     _voiceService.connectWebSocket(state.sessionId);
     _eventSub = _voiceService.events.listen(_handleEvent);
-    state = state.copyWith(isConnected: true);
+
+    // Tell backend to start streaming session
+    _voiceService.sendJsonViaWs({'type': 'stream_start', 'language': 'ar'});
+
+    // Start recording with stream output
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+    );
+
+    // Forward audio chunks to backend via WebSocket
+    _audioStreamSub = stream.listen((chunk) {
+      final b64 = base64Encode(chunk);
+      _voiceService.sendJsonViaWs({'type': 'stream_audio', 'data': b64});
+    });
+
+    state = state.copyWith(
+      voiceState: VoiceState.listening,
+      isStreaming: true,
+      isConnected: true,
+    );
+  }
+
+  /// Stop live streaming and trigger AI processing
+  Future<void> stopStreaming() async {
+    // Stop recording
+    await _audioStreamSub?.cancel();
+    _audioStreamSub = null;
+    await _recorder.stop();
+
+    // Tell backend stream ended
+    _voiceService.sendJsonViaWs({'type': 'stream_stop'});
+
+    state = state.copyWith(
+      voiceState: VoiceState.processing,
+      isStreaming: false,
+    );
   }
 
   void _handleEvent(Map<String, dynamic> event) {
@@ -84,14 +132,18 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
     final data = event['data'] as Map<String, dynamic>? ?? {};
 
     switch (type) {
-      case 'transcription_complete':
-        final text = data['text'] ?? '';
-        _addMessage(AIMessage(role: 'user', content: text));
-        state = state.copyWith(voiceState: VoiceState.processing, partialTranscription: null);
+      case 'stream_started':
+        state = state.copyWith(voiceState: VoiceState.listening, isStreaming: true);
         break;
 
       case 'transcription_partial':
         state = state.copyWith(partialTranscription: data['text']);
+        break;
+
+      case 'transcription_complete':
+        final text = data['text'] ?? '';
+        _addMessage(AIMessage(role: 'user', content: text));
+        state = state.copyWith(voiceState: VoiceState.processing, partialTranscription: null);
         break;
 
       case 'tool_call_started':
@@ -123,14 +175,11 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         state = state.copyWith(voiceState: VoiceState.idle);
         break;
 
-      case 'audio_chunk':
-        // Audio chunks handled by audio player at UI level
-        break;
-
       case 'error':
         state = state.copyWith(
           voiceState: VoiceState.idle,
           errorMessage: data['message'],
+          isStreaming: false,
         );
         break;
     }
@@ -148,7 +197,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
     state = state.copyWith(voiceState: VoiceState.processing);
 
     try {
-      // Use REST endpoint for reliability
       final transcription = await _voiceService.transcribe(audioData);
       _addMessage(AIMessage(role: 'user', content: transcription.text));
 
@@ -167,8 +215,6 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         voiceState: response.audioBase64 != null ? VoiceState.speaking : VoiceState.idle,
         currentAiText: response.transcript,
       );
-
-      // Audio playback handled at UI level via response.audioBase64
     } catch (e) {
       state = state.copyWith(
         voiceState: VoiceState.idle,
@@ -227,6 +273,9 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
       'get_unpaid_invoices': 'بدور على المتأخرات',
       'search_products': 'بدور على منتج',
       'search_customers': 'بدور على عميل',
+      'create_invoice': 'بعمل فاتورة',
+      'record_payment': 'بسجل دفعة',
+      'transfer_stock': 'بنقل بضاعة',
     };
     return names[tool] ?? 'بشتغل...';
   }
@@ -234,6 +283,8 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
   @override
   void dispose() {
     _eventSub?.cancel();
+    _audioStreamSub?.cancel();
+    _recorder.dispose();
     _voiceService.disconnectWebSocket();
     super.dispose();
   }

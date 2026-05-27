@@ -141,10 +141,16 @@ class VoiceService {
     );
   }
 
+  /// Send structured JSON message via WebSocket
+  void sendJsonViaWs(Map<String, dynamic> message) {
+    if (_wsChannel == null) return;
+    _wsChannel!.sink.add(jsonEncode(message));
+  }
+
   void sendAudioViaWs(Uint8List audioData) {
     if (_wsChannel == null) return;
     final b64 = base64Encode(audioData);
-    _wsChannel!.sink.add(jsonEncode({'type': 'audio', 'data': b64}));
+    _wsChannel!.sink.add(jsonEncode({'type': 'stream_audio', 'data': b64}));
   }
 
   void sendTextViaWs(String text) {
