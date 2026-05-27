@@ -14,16 +14,29 @@ class VoiceOrchestrator:
         self.db = db
         self.manager = ManagerAgent(db)
 
-    def process_voice_message(self, session_id: str, text: str) -> dict:
+    def process_voice_message(self, session_id: str, text: str, priority: str = "normal") -> dict:
         """Process a voice message through the Manager Agent.
+
+        Args:
+            session_id: Conversation session ID
+            text: Transcribed user speech
+            priority: "high" if this follows a barge-in (user interrupted AI),
+                      "normal" otherwise. High priority prepends context so the
+                      AI treats this as a fresh intent, not a continuation.
+
         Returns: {text: str, tools_used: list[str]}
         """
         if not text or not text.strip():
             return {"text": "لم أسمع شيء. جرب تاني.", "tools_used": []}
 
         try:
-            # Use the Manager Agent (same as text chat)
-            response = self.manager.chat(session_id, text)
+            # If high priority (post-interrupt), prepend context to signal fresh intent
+            if priority == "high":
+                prefixed_text = f"[المستخدم قاطعك - تجاهل ردك السابق وركز على الطلب الجديد] {text}"
+            else:
+                prefixed_text = text
+
+            response = self.manager.chat(session_id, prefixed_text)
             return {
                 "text": response,
                 "tools_used": self._extract_tools_used(session_id),
