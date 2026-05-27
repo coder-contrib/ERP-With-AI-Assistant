@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.purchases import PurchaseInvoice, PurchaseInvoiceItem
+from app.models.purchases import PurchaseInvoice, PurchaseInvoiceItem, PurchaseReturn
 
 
 class PurchaseRepository:
@@ -25,3 +25,8 @@ class PurchaseRepository:
         self.db.add(item)
         self.db.flush()
         return item
+
+    def get_returns_for_invoice(self, purchase_invoice_id: int) -> list[PurchaseReturn]:
+        return self.db.query(PurchaseReturn).filter(
+            PurchaseReturn.original_purchase_invoice_id == purchase_invoice_id
+        ).order_by(PurchaseReturn.return_date.desc()).all()
