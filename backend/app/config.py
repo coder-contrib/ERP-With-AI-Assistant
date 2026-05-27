@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     debug: bool = False
     allowed_origins: str = "http://localhost:3000,http://localhost:5173"
 
+    # AI Tool Permissions
+    ai_can_write: bool = True
+    ai_max_transaction: float = 50000
+    ai_can_cancel_invoices: bool = True
+    ai_can_refund: bool = True
+    ai_max_refund: float = 50000
+    ai_can_adjust_stock: bool = True
+    ai_can_create_customers: bool = True
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
