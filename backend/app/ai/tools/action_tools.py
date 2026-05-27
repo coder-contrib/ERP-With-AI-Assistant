@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from decimal import Decimal
 from datetime import datetime
+from app.config import settings
 from app.models.sales import SalesInvoice, SalesInvoiceItem
 from app.models.inventory import InventoryTransaction, InventoryCache
 from app.models.payments import CustomerPayment, CashTransaction
@@ -10,10 +11,17 @@ from app.models.products import Product
 from app.models.transfers import WarehouseTransfer
 
 
+def _check_write_permission() -> dict | None:
+    if not settings.ai_can_write:
+        return {"error": "AI write operations are disabled. Contact admin to enable AI_CAN_WRITE."}
+    return None
+
+
 class ActionTools:
     """Write/action tools for the AI Agent.
     These tools allow the AI to perform real operations:
     create invoices, record payments, manage stock, and CRM actions.
+    All actions respect permission settings from config.
     """
 
     def __init__(self, db: Session):
@@ -31,6 +39,9 @@ class ActionTools:
         paid_amount: float | None = None,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
         if not items:
             return {"error": "Items list cannot be empty"}
 
@@ -90,6 +101,12 @@ class ActionTools:
         total_amount = subtotal - discount_amount
         if total_amount < 0:
             total_amount = Decimal("0")
+
+        if float(total_amount) > settings.ai_max_transaction:
+            return {
+                "error": f"Transaction total ({total_amount} EGP) exceeds AI limit "
+                         f"({settings.ai_max_transaction} EGP). This sale must be created manually."
+            }
 
         if paid_amount is None:
             paid = total_amount if payment_type == "cash" else Decimal("0")
@@ -184,12 +201,24 @@ class ActionTools:
         }
 
     def cancel_invoice(self, invoice_id: int, reason: str | None = None) -> dict:
+        if err := _check_write_permission():
+            return err
+
+        if not settings.ai_can_cancel_invoices:
+            return {"error": "AI is not permitted to cancel invoices. Contact admin to enable AI_CAN_CANCEL_INVOICES."}
+
         invoice = self.db.query(SalesInvoice).filter(SalesInvoice.invoice_id == invoice_id).first()
         if not invoice:
             return {"error": f"Invoice {invoice_id} not found"}
 
         if invoice.payment_status == "cancelled":
             return {"error": "Invoice is already cancelled"}
+
+        if float(invoice.total_amount) > settings.ai_max_transaction:
+            return {
+                "error": f"Invoice total ({invoice.total_amount} EGP) exceeds AI limit "
+                         f"({settings.ai_max_transaction} EGP). Must be cancelled manually."
+            }
 
         items = self.db.query(SalesInvoiceItem).filter(SalesInvoiceItem.invoice_id == invoice_id).all()
         for item in items:
@@ -244,6 +273,9 @@ class ActionTools:
         }
 
     def apply_discount(self, invoice_id: int, discount_amount: float) -> dict:
+        if err := _check_write_permission():
+            return err
+
         invoice = self.db.query(SalesInvoice).filter(SalesInvoice.invoice_id == invoice_id).first()
         if not invoice:
             return {"error": f"Invoice {invoice_id} not found"}
@@ -295,8 +327,17 @@ class ActionTools:
         amount: float,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
         if amount <= 0:
             return {"error": "Amount must be greater than 0"}
+
+        if amount > settings.ai_max_transaction:
+            return {
+                "error": f"Payment amount ({amount} EGP) exceeds AI limit "
+                         f"({settings.ai_max_transaction} EGP). Must be recorded manually."
+            }
 
         customer = self.db.query(Customer).filter(Customer.customer_id == customer_id).first()
         if not customer:
@@ -354,8 +395,20 @@ class ActionTools:
         }
 
     def refund_payment(self, invoice_id: int, amount: float, reason: str | None = None) -> dict:
+        if err := _check_write_permission():
+            return err
+
+        if not settings.ai_can_refund:
+            return {"error": "AI is not permitted to issue refunds. Contact admin to enable AI_CAN_REFUND."}
+
         if amount <= 0:
             return {"error": "Amount must be greater than 0"}
+
+        if amount > settings.ai_max_refund:
+            return {
+                "error": f"Refund amount ({amount} EGP) exceeds AI refund limit "
+                         f"({settings.ai_max_refund} EGP). Must be processed manually."
+            }
 
         invoice = self.db.query(SalesInvoice).filter(SalesInvoice.invoice_id == invoice_id).first()
         if not invoice:
@@ -408,6 +461,9 @@ class ActionTools:
         cost_per_unit: float = 0,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
         if quantity <= 0:
             return {"error": "Quantity must be greater than 0"}
 
@@ -473,6 +529,9 @@ class ActionTools:
         quantity: float,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
         if quantity <= 0:
             return {"error": "Quantity must be greater than 0"}
 
@@ -578,6 +637,12 @@ class ActionTools:
         new_quantity: float,
         reason: str = "manual_adjustment",
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
+        if not settings.ai_can_adjust_stock:
+            return {"error": "AI is not permitted to adjust stock. Contact admin to enable AI_CAN_ADJUST_STOCK."}
+
         product = self.db.query(Product).filter(Product.product_id == product_id).first()
         if not product:
             return {"error": f"Product {product_id} not found"}
@@ -643,6 +708,12 @@ class ActionTools:
         payment_terms: int = 0,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
+        if not settings.ai_can_create_customers:
+            return {"error": "AI is not permitted to create customers. Contact admin to enable AI_CAN_CREATE_CUSTOMERS."}
+
         if not name or not name.strip():
             return {"error": "Customer name is required"}
 
@@ -680,6 +751,9 @@ class ActionTools:
         payment_terms: int | None = None,
         notes: str | None = None,
     ) -> dict:
+        if err := _check_write_permission():
+            return err
+
         customer = self.db.query(Customer).filter(Customer.customer_id == customer_id).first()
         if not customer:
             return {"error": f"Customer {customer_id} not found"}
