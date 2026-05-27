@@ -38,12 +38,14 @@ class ManagerAgent:
 
     Enhancements:
     - Injects long-term vector memory context for entity queries
-    - Passes session_id to executor for idempotency scoping
+    - Passes session_id + user_role to executor for safety scoping
     - Handles confirmation flow for sensitive operations
+    - Full observability via executor audit trail
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_role: str = "ai_agent"):
         self.db = db
+        self.user_role = user_role
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.ai_model
         self.vector_memory = VectorMemory()
@@ -53,8 +55,8 @@ class ManagerAgent:
         memory.add_user_message(user_message)
         history = memory.get_context_window(max_messages=20)
 
-        # Create executor scoped to this session for idempotency
-        executor = ToolExecutor(self.db, session_id=session_id)
+        # Create executor scoped to this session + user role
+        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role)
 
         # Retrieve long-term memory context
         long_term_context = self._get_long_term_context(user_message)
@@ -69,7 +71,6 @@ class ManagerAgent:
             if msg["role"] in ("user", "assistant"):
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Manager plans: Claude decides which tools to call
         response = self.client.messages.create(
             model=self.model,
             max_tokens=4096,
@@ -83,7 +84,7 @@ class ManagerAgent:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    logger.info(f"Manager planned: {block.name}")
+                    logger.info(f"Manager planned: {block.name} (role={self.user_role})")
                     result = executor.execute(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -95,7 +96,6 @@ class ManagerAgent:
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
 
-            # Manager sees results and plans next step (or responds)
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
