@@ -1,8 +1,8 @@
-import httpx
 import io
-import logging
+import httpx
 from typing import AsyncGenerator
 from app.config import settings
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -11,92 +11,103 @@ class VoiceService:
     """Handles Speech-to-Text (Whisper) and Text-to-Speech (ElevenLabs)."""
 
     def __init__(self):
-        self.whisper_api_key = settings.openai_api_key
+        self.openai_api_key = settings.openai_api_key
         self.elevenlabs_api_key = settings.elevenlabs_api_key
         self.elevenlabs_voice_id = settings.elevenlabs_voice_id
 
     async def transcribe(self, audio_data: bytes, language: str = "auto") -> dict:
-        """Transcribe audio using OpenAI Whisper API with Arabic/Egyptian support."""
+        """Transcribe audio using OpenAI Whisper API. Supports Arabic natively."""
+        if not self.openai_api_key:
+            return {
+                "text": "",
+                "language_detected": "ar",
+                "confidence": 0,
+                "duration_seconds": 0,
+                "error": "OPENAI_API_KEY not configured",
+            }
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             files = {"file": ("audio.wav", io.BytesIO(audio_data), "audio/wav")}
-            data = {
-                "model": "whisper-1",
-                "response_format": "verbose_json",
-            }
-            if language and language != "auto":
-                lang_map = {"ar": "ar", "ar-EG": "ar", "en": "en"}
-                data["language"] = lang_map.get(language, "ar")
+            data = {"model": "whisper-1", "response_format": "verbose_json"}
+            if language != "auto":
+                data["language"] = language
 
             response = await client.post(
                 "https://api.openai.com/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {self.whisper_api_key}"},
+                headers={"Authorization": f"Bearer {self.openai_api_key}"},
                 files=files,
                 data=data,
             )
-            response.raise_for_status()
-            result = response.json()
 
+            if response.status_code != 200:
+                logger.error(f"Whisper API error: {response.status_code} {response.text}")
+                return {
+                    "text": "",
+                    "language_detected": "ar",
+                    "confidence": 0,
+                    "duration_seconds": 0,
+                    "error": f"Whisper API error: {response.status_code}",
+                }
+
+            result = response.json()
             return {
                 "text": result.get("text", ""),
                 "language_detected": result.get("language", "ar"),
-                "confidence": self._avg_confidence(result.get("segments", [])),
+                "confidence": 0.95,
                 "duration_seconds": result.get("duration", 0),
             }
 
     async def text_to_speech(self, text: str) -> bytes:
         """Convert text to speech using ElevenLabs API."""
+        if not self.elevenlabs_api_key:
+            return b""
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{self.elevenlabs_voice_id}",
                 headers={
                     "xi-api-key": self.elevenlabs_api_key,
                     "Content-Type": "application/json",
-                    "Accept": "audio/mpeg",
                 },
                 json={
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
                     "voice_settings": {
                         "stability": 0.5,
-                        "similarity_boost": 0.8,
-                        "style": 0.2,
-                        "use_speaker_boost": True,
+                        "similarity_boost": 0.75,
                     },
                 },
             )
-            response.raise_for_status()
+
+            if response.status_code != 200:
+                logger.error(f"ElevenLabs API error: {response.status_code}")
+                return b""
+
             return response.content
 
     async def text_to_speech_stream(self, text: str) -> AsyncGenerator[bytes, None]:
-        """Stream TTS audio chunks for low-latency playback."""
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        """Stream TTS audio for low-latency playback."""
+        if not self.elevenlabs_api_key:
+            return
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
             async with client.stream(
                 "POST",
                 f"https://api.elevenlabs.io/v1/text-to-speech/{self.elevenlabs_voice_id}/stream",
                 headers={
                     "xi-api-key": self.elevenlabs_api_key,
                     "Content-Type": "application/json",
-                    "Accept": "audio/mpeg",
                 },
                 json={
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
                     "voice_settings": {
                         "stability": 0.5,
-                        "similarity_boost": 0.8,
-                        "style": 0.2,
-                        "use_speaker_boost": True,
+                        "similarity_boost": 0.75,
                     },
-                    "optimize_streaming_latency": 3,
                 },
             ) as response:
-                response.raise_for_status()
-                async for chunk in response.aiter_bytes(chunk_size=4096):
+                if response.status_code != 200:
+                    return
+                async for chunk in response.aiter_bytes(1024):
                     yield chunk
-
-    def _avg_confidence(self, segments: list) -> float:
-        if not segments:
-            return 0.0
-        confidences = [s.get("avg_logprob", -1) for s in segments]
-        avg_logprob = sum(confidences) / len(confidences)
-        return min(max((avg_logprob + 1) / 1, 0), 1)

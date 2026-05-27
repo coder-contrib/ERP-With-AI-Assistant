@@ -1,118 +1,119 @@
+import base64
 import json
-import logging
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from app.ai.voice_orchestrator import VoiceOrchestrator
 from app.services.voice_service import VoiceService
-from app.schemas.voice import VoiceStreamEvent
-import base64
+from app.ai.voice_orchestrator import VoiceOrchestrator
+import logging
 
 logger = logging.getLogger(__name__)
 
 
-class VoiceWebSocketManager:
-    """Manages realtime voice WebSocket connections."""
-
-    def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
-
-    async def connect(self, session_id: str, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections[session_id] = websocket
-
-    def disconnect(self, session_id: str):
-        self.active_connections.pop(session_id, None)
-
-    async def send_event(self, session_id: str, event_type: str, data: dict = {}):
-        ws = self.active_connections.get(session_id)
-        if ws:
-            await ws.send_json({"type": event_type, "data": data})
-
-
-voice_ws_manager = VoiceWebSocketManager()
-
-
 async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session):
-    """Handle a realtime voice WebSocket connection.
-
+    """Handle realtime voice WebSocket connection.
+    
     Protocol:
-    - Client sends: {"type": "audio", "data": "<base64 audio>"}
-    - Client sends: {"type": "text", "data": {"message": "..."}}
-    - Server sends: {"type": "<VoiceStreamEvent>", "data": {...}}
+    Client → Server:
+      {"type": "audio", "data": "<base64 audio>"}
+      {"type": "text", "data": {"message": "..."}}
+    
+    Server → Client:
+      {"type": "transcription_partial", "data": {"text": "..."}}
+      {"type": "transcription_complete", "data": {"text": "...", "language": "..."}}
+      {"type": "tool_call_started", "data": {"tool": "..."}}
+      {"type": "tool_call_finished", "data": {"tool": "..."}}
+      {"type": "ai_response_complete", "data": {"text": "...", "tools_used": [...]}}
+      {"type": "ai_speaking", "data": {}}
+      {"type": "audio_chunk", "data": {"bytes": "<base64>"}}
+      {"type": "ai_finished", "data": {}}
+      {"type": "error", "data": {"message": "..."}}
     """
-    await voice_ws_manager.connect(session_id, websocket)
+    await websocket.accept()
     voice_service = VoiceService()
     orchestrator = VoiceOrchestrator(db)
 
     try:
         while True:
             raw = await websocket.receive_text()
-            message = json.loads(raw)
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                await _send(websocket, "error", {"message": "Invalid JSON"})
+                continue
+
             msg_type = message.get("type")
 
             if msg_type == "audio":
-                await websocket.send_json({"type": VoiceStreamEvent.RECORDING_STARTED, "data": {}})
-
                 audio_b64 = message.get("data", "")
-                audio_bytes = base64.b64decode(audio_b64)
+                try:
+                    audio_bytes = base64.b64decode(audio_b64)
+                except Exception:
+                    await _send(websocket, "error", {"message": "Invalid base64 audio"})
+                    continue
 
                 # Transcribe
                 transcription = await voice_service.transcribe(audio_bytes)
-                await websocket.send_json({
-                    "type": VoiceStreamEvent.TRANSCRIPTION_COMPLETE,
-                    "data": transcription,
-                })
+                text = transcription.get("text", "")
+                language = transcription.get("language_detected", "ar")
 
-                # Process through Claude
-                async for event in orchestrator.process_voice_stream(session_id, transcription["text"]):
-                    await websocket.send_json(event)
+                if not text.strip():
+                    await _send(websocket, "error", {"message": "Could not transcribe audio"})
+                    continue
+
+                await _send(websocket, "transcription_complete", {"text": text, "language": language})
+
+                # Process through AI
+                result = orchestrator.process_voice_message(session_id, text)
+
+                await _send(websocket, "ai_response_complete", {
+                    "text": result["text"],
+                    "tools_used": result["tools_used"],
+                })
 
                 # Generate TTS
-                response_text = transcription.get("text", "")
-                async for event in orchestrator.process_voice_stream(session_id, transcription["text"]):
-                    if event["type"] == "ai_response_complete":
-                        response_text = event["data"]["text"]
-                        break
+                if result["text"]:
+                    await _send(websocket, "ai_speaking", {})
+                    audio_data = await voice_service.text_to_speech(result["text"])
+                    if audio_data:
+                        audio_b64_out = base64.b64encode(audio_data).decode()
+                        await _send(websocket, "audio_chunk", {"bytes": audio_b64_out})
 
-                # Stream audio back
-                audio_chunks = []
-                async for chunk in voice_service.text_to_speech_stream(response_text):
-                    audio_chunks.append(chunk)
-                    await websocket.send_bytes(chunk)
-
-                await websocket.send_json({
-                    "type": VoiceStreamEvent.AI_FINISHED,
-                    "data": {"text": response_text},
-                })
+                await _send(websocket, "ai_finished", {})
 
             elif msg_type == "text":
-                text = message.get("data", {}).get("message", "")
+                data = message.get("data", {})
+                text = data.get("message", "").strip()
+
                 if not text:
                     continue
 
-                async for event in orchestrator.process_voice_stream(session_id, text):
-                    await websocket.send_json(event)
-
-                # Get final text for TTS
+                # Process through AI
                 result = orchestrator.process_voice_message(session_id, text)
-                tts_text = result["text"]
 
-                await websocket.send_json({"type": VoiceStreamEvent.AI_SPEAKING, "data": {"text": tts_text}})
+                await _send(websocket, "ai_response_complete", {
+                    "text": result["text"],
+                    "tools_used": result["tools_used"],
+                })
 
-                async for chunk in voice_service.text_to_speech_stream(tts_text):
-                    await websocket.send_bytes(chunk)
+                # Generate TTS
+                if result["text"]:
+                    await _send(websocket, "ai_speaking", {})
+                    audio_data = await voice_service.text_to_speech(result["text"])
+                    if audio_data:
+                        audio_b64_out = base64.b64encode(audio_data).decode()
+                        await _send(websocket, "audio_chunk", {"bytes": audio_b64_out})
 
-                await websocket.send_json({"type": VoiceStreamEvent.AI_FINISHED, "data": {"text": tts_text}})
-
-            elif msg_type == "ping":
-                await websocket.send_json({"type": "pong", "data": {}})
+                await _send(websocket, "ai_finished", {})
 
     except WebSocketDisconnect:
-        voice_ws_manager.disconnect(session_id)
+        logger.info(f"Voice WebSocket disconnected: {session_id}")
     except Exception as e:
         logger.error(f"Voice WebSocket error: {e}")
         try:
-            await websocket.send_json({"type": VoiceStreamEvent.ERROR, "data": {"message": str(e)}})
+            await _send(websocket, "error", {"message": str(e)})
         except Exception:
             pass
-        voice_ws_manager.disconnect(session_id)
+
+
+async def _send(websocket: WebSocket, event_type: str, data: dict):
+    await websocket.send_text(json.dumps({"type": event_type, "data": data}))
