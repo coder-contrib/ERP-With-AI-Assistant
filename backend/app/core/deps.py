@@ -42,3 +42,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
+# Alias used by AI audit dashboard
+get_current_admin_user = require_admin
