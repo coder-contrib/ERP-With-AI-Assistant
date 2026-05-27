@@ -74,15 +74,22 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
     final voiceState = ref.read(voiceChatProvider);
 
     if (voiceState.isStreaming) {
-      // Stop streaming and trigger AI processing
       _bgAnimController.stop();
       _bgAnimController.reset();
       await ref.read(voiceChatProvider.notifier).stopStreaming();
     } else {
-      // Start live streaming
       _bgAnimController.repeat(reverse: true);
       await ref.read(voiceChatProvider.notifier).startStreaming();
     }
+  }
+
+  Future<void> _bargeIn() async {
+    if (!_hasPermission) {
+      await _checkPermission();
+      if (!_hasPermission) return;
+    }
+    _bgAnimController.repeat(reverse: true);
+    await ref.read(voiceChatProvider.notifier).bargeIn();
   }
 
   void _sendText() {
@@ -112,11 +119,9 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Header
           _buildHeader(voiceState, isDark),
           const SizedBox(height: 16),
 
-          // Chat messages
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -198,8 +203,6 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
           ),
 
           const SizedBox(height: 16),
-
-          // Voice controls
           _buildVoiceControls(voiceState, isDark),
         ],
       ),
@@ -324,11 +327,10 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               child: VoiceWaveform(isActive: true, color: AppColors.primary, height: 50),
             ),
 
-          // Mic button
+          // Mic button row
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Keyboard toggle
               IconButton(
                 onPressed: () => setState(() => _showTextInput = true),
                 icon: const Icon(Icons.keyboard, size: 22),
@@ -336,22 +338,25 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               ),
               const SizedBox(width: 24),
 
-              // Main mic button - now uses streaming
+              // Main mic button: barge-in when speaking, toggle streaming otherwise
               PulsingMicButton(
                 isRecording: voiceState.isStreaming || voiceState.voiceState == VoiceState.listening,
-                onTap: voiceState.voiceState == VoiceState.processing || voiceState.voiceState == VoiceState.speaking
-                    ? () {}
-                    : _toggleStreaming,
+                onTap: voiceState.voiceState == VoiceState.speaking
+                    ? _bargeIn
+                    : voiceState.voiceState == VoiceState.processing
+                        ? () {}
+                        : _toggleStreaming,
                 size: 72,
               ),
 
               const SizedBox(width: 24),
 
-              // Stop speaking button (visible when AI is speaking)
+              // Stop speaking / barge-in hint
               if (voiceState.voiceState == VoiceState.speaking)
                 IconButton(
                   onPressed: () => ref.read(voiceChatProvider.notifier).onSpeakingDone(),
                   icon: const Icon(Icons.stop_circle, size: 22, color: AppColors.error),
+                  tooltip: 'أوقف الرد',
                   style: IconButton.styleFrom(backgroundColor: AppColors.error.withOpacity(0.1)),
                 )
               else
@@ -368,7 +373,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
                 : voiceState.voiceState == VoiceState.processing
                     ? 'بفكر في الإجابة...'
                     : voiceState.voiceState == VoiceState.speaking
-                        ? 'برد عليك...'
+                        ? 'اضغط الميكروفون لمقاطعتي'
                         : 'اضغط على الميكروفون للتحدث',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
@@ -400,7 +405,6 @@ class _VoiceChatBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: alignment,
         children: [
-          // Tool badges
           if (message.toolCalls != null && message.toolCalls!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
@@ -422,7 +426,6 @@ class _VoiceChatBubble extends StatelessWidget {
               ),
             ),
 
-          // Message bubble
           Container(
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
