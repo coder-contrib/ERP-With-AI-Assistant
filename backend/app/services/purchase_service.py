@@ -124,6 +124,12 @@ class PurchaseService:
                     raise ValidationError(
                         f"Return quantity ({ret_item.returned_quantity}) exceeds purchased quantity ({orig.purchased_quantity})"
                     )
+                available = self.inventory.get_available_quantity(ret_item.product_id, data.warehouse_id)
+                if ret_item.returned_quantity > available:
+                    raise ValidationError(
+                        f"Return quantity ({ret_item.returned_quantity}) exceeds available stock ({available}). "
+                        f"Cannot return more than what is currently in stock."
+                    )
 
             returned_amount = sum(item.total for item in data.items)
             refund_amount = min(data.refund_amount, returned_amount)
