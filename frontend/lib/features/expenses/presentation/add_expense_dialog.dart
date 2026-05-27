@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../auth/presentation/auth_provider.dart';
 import '../data/expenses_repository.dart';
 import 'expenses_provider.dart';
 
@@ -18,7 +19,6 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
   final _amountController = TextEditingController();
   final _nameController = TextEditingController();
   final _notesController = TextEditingController();
-  final _paidByController = TextEditingController();
   final _receiptController = TextEditingController();
   final _newCategoryController = TextEditingController();
   bool _isLoading = false;
@@ -29,10 +29,14 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
     _amountController.dispose();
     _nameController.dispose();
     _notesController.dispose();
-    _paidByController.dispose();
     _receiptController.dispose();
     _newCategoryController.dispose();
     super.dispose();
+  }
+
+  String _getCurrentUserName() {
+    final authState = ref.read(authProvider);
+    return authState.token?.fullName ?? '';
   }
 
   Future<void> _submit() async {
@@ -60,7 +64,7 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
         name: _nameController.text.trim(),
         amount: double.parse(_amountController.text.trim()),
         paymentMethod: _paymentMethod,
-        paidBy: _paidByController.text.trim().isEmpty ? null : _paidByController.text.trim(),
+        paidBy: _getCurrentUserName(),
         receiptNumber: _receiptController.text.trim().isEmpty ? null : _receiptController.text.trim(),
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
@@ -86,6 +90,7 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
   Widget build(BuildContext context) {
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final userName = _getCurrentUserName();
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -234,13 +239,16 @@ class _AddExpenseDialogState extends ConsumerState<AddExpenseDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Paid by
+                      // Paid by - read-only, shows current user
                       TextFormField(
-                        controller: _paidByController,
-                        decoration: const InputDecoration(
+                        initialValue: userName,
+                        readOnly: true,
+                        enabled: false,
+                        decoration: InputDecoration(
                           labelText: 'Paid By',
-                          prefixIcon: Icon(Icons.person_outline),
-                          hintText: 'Who paid?',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          filled: true,
+                          fillColor: isDark ? AppColors.darkBackground : AppColors.background,
                         ),
                       ),
                       const SizedBox(height: 16),
