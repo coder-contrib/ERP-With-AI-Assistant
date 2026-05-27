@@ -5,7 +5,7 @@ from app.config import settings
 from app.core.exceptions import AppError
 from app.core.middleware import app_error_handler
 from app.events.registry import register_event_handlers
-from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws, insights, anomalies, opening_balances, voice
+from app.routers import auth, products, categories, customers, suppliers, sales, purchases, inventory, payments, expenses, users, transfers, dashboard, tasks, ai, reports, notifications, embeddings, ws, insights, anomalies, opening_balances, voice, ai_audit
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.include_router(anomalies.router, prefix="/api/anomalies", tags=["Anomaly Det
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI Assistant"])
 app.include_router(voice.router, prefix="/api/ai/voice", tags=["Voice AI"])
+app.include_router(ai_audit.router, prefix="/api/admin/ai-audit", tags=["AI Audit Dashboard"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["Embeddings"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
