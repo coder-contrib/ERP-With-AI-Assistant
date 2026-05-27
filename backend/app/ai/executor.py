@@ -2,28 +2,44 @@ import json
 from sqlalchemy.orm import Session
 from app.ai.safety.transaction_guard import TransactionGuard, SENSITIVE_OPERATIONS
 from app.ai.safety.idempotency import IdempotencyGuard
+from app.ai.safety.permissions import AIPermissionChecker, AIPermissionDenied
+from app.ai.observability import AIObserver
 from app.ai.memory.vector_memory import VectorMemory
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Tools that involve money (for amount limit checks)
+FINANCIAL_TOOLS = {
+    "create_invoice": lambda p: sum(i.get("quantity", 0) * i.get("unit_price", 0) for i in p.get("items", [])),
+    "record_payment": lambda p: p.get("amount", 0),
+    "refund_payment": lambda p: p.get("amount", 0),
+    "apply_discount": lambda p: p.get("discount_amount", 0),
+}
 
 
 class ToolExecutor:
     """Pure execution layer. No LLM. No reasoning.
     Maps tool names to backend service functions and runs them.
 
-    Now includes:
-    - Idempotency: prevents duplicate write operations
-    - Transaction safety: dry-run and confirmation for sensitive ops
-    - Memory: stores transaction facts for long-term recall
+    Safety stack (in order):
+    1. Permission check (role-based)
+    2. Amount limit check (role-based)
+    3. Idempotency check (deduplication)
+    4. Confirmation gate (dry-run for sensitive ops)
+    5. Execute + audit log
+    6. Record for idempotency + rollback + memory
     """
 
-    def __init__(self, db: Session, session_id: str = ""):
+    def __init__(self, db: Session, session_id: str = "", user_role: str = "ai_agent"):
         self.db = db
         self.session_id = session_id
+        self.user_role = user_role
         self._tools = None
         self.guard = TransactionGuard()
         self.idempotency = IdempotencyGuard(session_id)
+        self.permissions = AIPermissionChecker(user_role)
+        self.observer = AIObserver(session_id, user_role)
         self.vector_memory = VectorMemory()
 
     @property
@@ -136,76 +152,127 @@ class ToolExecutor:
         }
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a tool by name with safety checks.
+        """Execute a tool by name with full safety stack.
 
-        For write operations:
-        1. Check idempotency (return cached if duplicate)
-        2. Check if confirmation is required (return preview if so)
-        3. Execute and record for idempotency + rollback
+        Order:
+        1. Permission check
+        2. Amount check (financial tools)
+        3. Idempotency (return cached if duplicate)
+        4. Confirmation gate (return preview if sensitive)
+        5. Execute + audit
+        6. Record idempotency + rollback + memory
         """
-        # Handle confirmation of pending transactions
+        # Start audit entry
+        audit = self.observer.start(tool_name, tool_input)
+
+        # Handle confirmation separately (always allowed if tool was already permitted)
         if tool_name == "confirm_transaction":
-            return self._confirm_transaction(tool_input.get("confirmation_id", ""))
+            result = self._confirm_transaction(tool_input.get("confirmation_id", ""))
+            self.observer.complete(audit, json.loads(result))
+            return result
 
         fn = self.tools.get(tool_name)
         if not fn:
-            return json.dumps({"error": f"Unknown tool: {tool_name}"})
+            error_result = {"error": f"Unknown tool: {tool_name}"}
+            self.observer.fail(audit, f"Unknown tool: {tool_name}")
+            return json.dumps(error_result)
 
-        # For write operations: apply safety layers
+        # 1. Permission check
+        try:
+            self.permissions.check_or_raise(tool_name)
+        except AIPermissionDenied as e:
+            self.observer.block(audit, e.reason)
+            return json.dumps({
+                "error": "permission_denied",
+                "message": e.reason,
+                "role": self.user_role,
+                "tool": tool_name,
+            })
+
+        # 2. Amount limit check (financial tools)
+        if tool_name in FINANCIAL_TOOLS:
+            amount = FINANCIAL_TOOLS[tool_name](tool_input)
+            try:
+                self.permissions.check_amount(tool_name, amount)
+            except AIPermissionDenied as e:
+                self.observer.block(audit, e.reason)
+                return json.dumps({
+                    "error": "amount_exceeded",
+                    "message": e.reason,
+                    "role": self.user_role,
+                    "amount": amount,
+                })
+
+        # For write operations: apply remaining safety layers
         if tool_name in SENSITIVE_OPERATIONS:
-            return self._execute_with_safety(tool_name, tool_input, fn)
+            result_str = self._execute_with_safety(tool_name, tool_input, fn, audit)
+            return result_str
 
         # Read operations: execute directly
         try:
             result = fn(**tool_input)
+            result_dict = result if isinstance(result, dict) else {"result": result}
+            self.observer.complete(audit, result_dict)
             return json.dumps(result, default=str)
         except Exception as e:
+            self.observer.fail(audit, str(e))
             logger.error(f"Tool execution error [{tool_name}]: {e}")
             return json.dumps({"error": str(e)})
 
-    def _execute_with_safety(self, tool_name: str, params: dict, fn) -> str:
+    def _execute_with_safety(self, tool_name: str, params: dict, fn, audit) -> str:
         """Execute a write operation with idempotency + confirmation + rollback."""
 
-        # 1. Idempotency check
+        # 3. Idempotency check
         cached = self.idempotency.check_duplicate(tool_name, params)
         if cached:
+            self.observer.complete(audit, cached)
             return json.dumps(cached, default=str)
 
-        # 2. Confirmation check
-        if self.guard.needs_confirmation(tool_name, params):
+        # 4. Confirmation check (use role-specific threshold)
+        role_threshold = self.permissions.get_confirmation_threshold()
+        needs_confirm = self.guard.needs_confirmation(tool_name, params)
+
+        # Also force confirmation if amount exceeds role threshold
+        if tool_name in FINANCIAL_TOOLS:
+            amount = FINANCIAL_TOOLS[tool_name](params)
+            if amount > role_threshold:
+                needs_confirm = True
+
+        if needs_confirm:
             preview = self.guard.dry_run(tool_name, params)
             confirmation_id = self.guard.store_pending(self.session_id, tool_name, params)
-            return json.dumps({
+            result = {
                 "status": "requires_confirmation",
                 "preview": preview,
                 "confirmation_id": confirmation_id,
                 "message": f"⚠️ هل تريد تنفيذ: {preview['would_do']}؟ قل 'أكد' أو 'تأكيد' للمتابعة.",
-            }, default=str)
+            }
+            self.observer.complete(audit, result)
+            return json.dumps(result, default=str)
 
-        # 3. Execute
+        # 5. Execute
         try:
             result = fn(**params)
             result_dict = result if isinstance(result, dict) else {"result": result}
 
-            # Record for idempotency
+            # 6. Record for idempotency + rollback + memory
             self.idempotency.record_execution(tool_name, params, result_dict)
-
-            # Store rollback info
             rollback_id = self.guard.store_rollback_info(tool_name, params, result_dict)
             result_dict["_rollback_id"] = rollback_id
 
-            # Store in long-term memory
             self._store_in_memory(tool_name, params, result_dict)
+            self.observer.complete(audit, result_dict)
 
             return json.dumps(result_dict, default=str)
         except Exception as e:
+            self.observer.fail(audit, str(e))
             logger.error(f"Tool execution error [{tool_name}]: {e}")
             return json.dumps({"error": str(e)})
 
     def _confirm_transaction(self, confirmation_id: str) -> str:
         """Execute a previously stored pending transaction after user confirms."""
         if not confirmation_id:
-            return json.dumps({"error": "confirmation_id مطلوب"})
+            return json.dumps({"error": "كود التأكيد مطلوب"})
 
         tx = self.guard.confirm_and_clear(confirmation_id)
         if not tx:
@@ -259,9 +326,8 @@ class ToolExecutor:
                 name = params.get("name", "")
                 customer_id = result.get("customer_id") or result.get("id", 0)
                 self.vector_memory.store_customer_fact(
-                    customer_id=customer_id,
-                    name=name,
-                    fact=f"عميل جديد. تليفون: {params.get('phone', 'غير محدد')}. عنوان: {params.get('address', 'غير محدد')}",
+                    customer_id=customer_id,\n                    name=name,
+                    fact=f\"عميل جديد. تليفون: {params.get('phone', 'غير محدد')}. عنوان: {params.get('address', 'غير محدد')}\",
                 )
         except Exception as e:
-            logger.warning(f"Memory store failed (non-critical): {e}")
+            logger.warning(f\"Memory store failed (non-critical): {e}\")
