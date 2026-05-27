@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_refresh.dart';
+import '../../../core/widgets/validation_error_banner.dart';
 import '../data/purchases_repository.dart';
 import '../../suppliers/data/suppliers_repository.dart';
 import '../../products/data/products_repository.dart';
@@ -24,6 +25,7 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
   int _selectedWarehouseId = 1;
   String _unitType = 'meter';
   bool _isLoading = false;
+  String? _errorMessage;
 
   final List<_PurchaseLineItem> _items = [];
 
@@ -61,18 +63,23 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
     return total;
   }
 
+  void _clearError() {
+    setState(() => _errorMessage = null);
+  }
+
+  void _showError(String message) {
+    setState(() => _errorMessage = message);
+  }
+
   Future<void> _submit() async {
+    _clearError();
     if (!_formKey.currentState!.validate()) return;
     if (_selectedSupplierId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a supplier'), backgroundColor: AppColors.error),
-      );
+      _showError('Please select a supplier before submitting.');
       return;
     }
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one item'), backgroundColor: AppColors.error),
-      );
+      _showError('Please add at least one item to the purchase invoice.');
       return;
     }
 
@@ -106,9 +113,7 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
-        );
+        _showError(e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -156,6 +161,12 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Validation Error Banner
+                      ValidationErrorBanner(
+                        message: _errorMessage,
+                        onDismiss: _clearError,
+                      ),
+
                       // Section: Invoice Details
                       _sectionHeader('Invoice Details', Icons.receipt_outlined),
                       const SizedBox(height: 12),
@@ -173,7 +184,10 @@ class _CreatePurchaseDialogState extends ConsumerState<CreatePurchaseDialog> {
                                   value: s.supplierId,
                                   child: Text(s.supplierName),
                                 )).toList(),
-                                onChanged: (v) => setState(() => _selectedSupplierId = v),
+                                onChanged: (v) {
+                                  setState(() => _selectedSupplierId = v);
+                                  _clearError();
+                                },
                                 validator: (v) => v == null ? 'Required' : null,
                               ),
                               loading: () => const TextField(enabled: false, decoration: InputDecoration(labelText: 'Loading...')),
