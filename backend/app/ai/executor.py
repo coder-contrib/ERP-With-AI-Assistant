@@ -15,21 +15,17 @@ FINANCIAL_TOOLS = {
     "record_payment": lambda p: p.get("amount", 0),
     "refund_payment": lambda p: p.get("amount", 0),
     "apply_discount": lambda p: p.get("discount_amount", 0),
+    "create_expense": lambda p: p.get("amount", 0),
+    "create_purchase_invoice": lambda p: sum(i.get("quantity", 0) * i.get("purchase_price", 0) for i in p.get("items", [])),
+    "set_customer_opening_balance": lambda p: p.get("amount", 0),
+    "set_supplier_opening_balance": lambda p: p.get("amount", 0),
+    "set_cash_opening_balance": lambda p: p.get("amount", 0),
+    "set_opening_inventory": lambda p: p.get("quantity", 0) * p.get("cost_per_unit", 0),
 }
 
 
 class ToolExecutor:
-    """Pure execution layer. No LLM. No reasoning.
-    Maps tool names to backend service functions and runs them.
-
-    Safety stack (in order):
-    1. Permission check (role-based)
-    2. Amount limit check (role-based)
-    3. Idempotency check (deduplication)
-    4. Confirmation gate (dry-run for sensitive ops)
-    5. Execute + audit log
-    6. Record for idempotency + rollback + memory
-    """
+    """Pure execution layer. No LLM. No reasoning."""
 
     def __init__(self, db: Session, session_id: str = "", user_role: str = "ai_agent"):
         self.db = db
@@ -54,6 +50,7 @@ class ToolExecutor:
         from app.ai.tools.finance_tools import FinanceTools
         from app.ai.tools.reporting_tools import ReportingTools
         from app.ai.tools.action_tools import ActionTools
+        from app.ai.tools.extended_tools import ExtendedTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
@@ -61,6 +58,7 @@ class ToolExecutor:
         finance = FinanceTools(self.db)
         reporting = ReportingTools(self.db)
         actions = ActionTools(self.db)
+        extended = ExtendedTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         return {
@@ -147,12 +145,126 @@ class ToolExecutor:
                 payment_terms=p.get("payment_terms"),
                 notes=p.get("notes"),
             ),
+            # --- Extended: Opening Balances ---
+            "set_customer_opening_balance": lambda **p: extended.set_customer_opening_balance(
+                customer_id=p["customer_id"],
+                amount=p["amount"],
+                balance_type=p.get("balance_type", "debit"),
+                notes=p.get("notes"),
+            ),
+            "set_supplier_opening_balance": lambda **p: extended.set_supplier_opening_balance(
+                supplier_id=p["supplier_id"],
+                amount=p["amount"],
+                balance_type=p.get("balance_type", "credit"),
+                notes=p.get("notes"),
+            ),
+            "set_cash_opening_balance": lambda **p: extended.set_cash_opening_balance(
+                amount=p["amount"],
+                account_name=p.get("account_name", "الصندوق الرئيسي"),
+                notes=p.get("notes"),
+            ),
+            "set_opening_inventory": lambda **p: extended.set_opening_inventory(
+                product_id=p["product_id"],
+                warehouse_id=p["warehouse_id"],
+                quantity=p["quantity"],
+                cost_per_unit=p["cost_per_unit"],
+                notes=p.get("notes"),
+            ),
+            "get_opening_balances": lambda **p: extended.get_opening_balances(
+                entity_type=p.get("entity_type"),
+            ),
+            # --- Extended: Expenses ---
+            "create_expense": lambda **p: extended.create_expense(
+                name=p["name"],
+                amount=p["amount"],
+                category=p.get("category", "Miscellaneous"),
+                notes=p.get("notes"),
+                expense_date=p.get("expense_date"),
+            ),
+            "list_expenses": lambda **p: extended.list_expenses(
+                date_from=p.get("date_from"),
+                date_to=p.get("date_to"),
+                category=p.get("category"),
+                search=p.get("search"),
+                limit=p.get("limit", 20),
+            ),
+            "get_expense_summary": lambda **_: extended.get_expense_summary(),
+            # --- Extended: Sales Invoice Retrieval ---
+            "list_sales_invoices": lambda **p: extended.list_sales_invoices(
+                limit=p.get("limit", 20),
+                status=p.get("status"),
+            ),
+            "get_sales_invoice": lambda **p: extended.get_sales_invoice(p["invoice_id"]),
+            "get_invoice_items": lambda **p: extended.get_invoice_items(p["invoice_id"]),
+            "create_sales_return": lambda **p: extended.create_sales_return(
+                invoice_id=p["invoice_id"],
+                items=p["items"],
+                reason=p.get("reason"),
+            ),
+            # --- Extended: Purchase Invoices ---
+            "list_purchase_invoices": lambda **p: extended.list_purchase_invoices(
+                limit=p.get("limit", 20),
+            ),
+            "get_purchase_invoice": lambda **p: extended.get_purchase_invoice(p["purchase_invoice_id"]),
+            "get_purchase_items": lambda **p: extended.get_purchase_items(p["purchase_invoice_id"]),
+            "create_purchase_invoice": lambda **p: extended.create_purchase_invoice(
+                supplier_id=p["supplier_id"],
+                items=p["items"],
+                payment_type=p.get("payment_type", "cash"),
+                paid_amount=p.get("paid_amount"),
+                warehouse_id=p.get("warehouse_id", 1),
+                notes=p.get("notes"),
+            ),
+            "create_purchase_return": lambda **p: extended.create_purchase_return(
+                purchase_invoice_id=p["purchase_invoice_id"],
+                items=p["items"],
+                reason=p.get("reason"),
+            ),
+            # --- Extended: Suppliers ---
+            "create_supplier": lambda **p: extended.create_supplier(
+                name=p["name"],
+                phone=p.get("phone"),
+                address=p.get("address"),
+                notes=p.get("notes"),
+            ),
+            "update_supplier": lambda **p: extended.update_supplier(
+                supplier_id=p["supplier_id"],
+                name=p.get("name"),
+                phone=p.get("phone"),
+                address=p.get("address"),
+                notes=p.get("notes"),
+            ),
+            "search_suppliers": lambda **p: extended.search_suppliers(
+                query=p["query"],
+                limit=p.get("limit", 10),
+            ),
+            # --- Extended: Products ---
+            "create_product": lambda **p: extended.create_product(
+                name=p["name"],
+                sku=p.get("sku"),
+                category_id=p.get("category_id"),
+                selling_price=p.get("selling_price", 0),
+                cost_price=p.get("cost_price", 0),
+                base_unit=p.get("base_unit", "meter"),
+                barcode=p.get("barcode"),
+                notes=p.get("notes"),
+            ),
+            "update_product": lambda **p: extended.update_product(
+                product_id=p["product_id"],
+                name=p.get("name"),
+                selling_price=p.get("selling_price"),
+                cost_price=p.get("cost_price"),
+                category_id=p.get("category_id"),
+                base_unit=p.get("base_unit"),
+                barcode=p.get("barcode"),
+                notes=p.get("notes"),
+            ),
+            "get_product": lambda **p: extended.get_product(p["product_id"]),
             # --- Safety: Confirmation ---
             "confirm_transaction": lambda **p: self._confirm_transaction(p["confirmation_id"]),
         }
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a tool by name with full safety stack."""
         audit = self.observer.start(tool_name, tool_input)
 
         if tool_name == "confirm_transaction":
@@ -166,37 +278,23 @@ class ToolExecutor:
             self.observer.fail(audit, f"Unknown tool: {tool_name}")
             return json.dumps(error_result)
 
-        # 1. Permission check
         try:
             self.permissions.check_or_raise(tool_name)
         except AIPermissionDenied as e:
             self.observer.block(audit, e.reason)
-            return json.dumps({
-                "error": "permission_denied",
-                "message": e.reason,
-                "role": self.user_role,
-                "tool": tool_name,
-            })
+            return json.dumps({"error": "permission_denied", "message": e.reason, "role": self.user_role, "tool": tool_name})
 
-        # 2. Amount limit check
         if tool_name in FINANCIAL_TOOLS:
             amount = FINANCIAL_TOOLS[tool_name](tool_input)
             try:
                 self.permissions.check_amount(tool_name, amount)
             except AIPermissionDenied as e:
                 self.observer.block(audit, e.reason)
-                return json.dumps({
-                    "error": "amount_exceeded",
-                    "message": e.reason,
-                    "role": self.user_role,
-                    "amount": amount,
-                })
+                return json.dumps({"error": "amount_exceeded", "message": e.reason, "role": self.user_role, "amount": amount})
 
-        # For write operations: apply remaining safety layers
         if tool_name in SENSITIVE_OPERATIONS:
             return self._execute_with_safety(tool_name, tool_input, fn, audit)
 
-        # Read operations: execute directly
         try:
             result = fn(**tool_input)
             result_dict = result if isinstance(result, dict) else {"result": result}
@@ -208,15 +306,11 @@ class ToolExecutor:
             return json.dumps({"error": str(e)})
 
     def _execute_with_safety(self, tool_name: str, params: dict, fn, audit) -> str:
-        """Execute a write operation with idempotency + confirmation + rollback."""
-
-        # 3. Idempotency check
         cached = self.idempotency.check_duplicate(tool_name, params)
         if cached:
             self.observer.complete(audit, cached)
             return json.dumps(cached, default=str)
 
-        # 4. Confirmation check
         role_threshold = self.permissions.get_confirmation_threshold()
         needs_confirm = self.guard.needs_confirmation(tool_name, params)
 
@@ -237,19 +331,14 @@ class ToolExecutor:
             self.observer.complete(audit, result)
             return json.dumps(result, default=str)
 
-        # 5. Execute
         try:
             result = fn(**params)
             result_dict = result if isinstance(result, dict) else {"result": result}
-
-            # 6. Record
             self.idempotency.record_execution(tool_name, params, result_dict)
             rollback_id = self.guard.store_rollback_info(tool_name, params, result_dict)
             result_dict["_rollback_id"] = rollback_id
-
             self._store_in_memory(tool_name, params, result_dict)
             self.observer.complete(audit, result_dict)
-
             return json.dumps(result_dict, default=str)
         except Exception as e:
             self.observer.fail(audit, str(e))
@@ -257,7 +346,6 @@ class ToolExecutor:
             return json.dumps({"error": str(e)})
 
     def _confirm_transaction(self, confirmation_id: str) -> str:
-        """Execute a previously stored pending transaction after user confirms."""
         if not confirmation_id:
             return json.dumps({"error": "كود التأكيد مطلوب"})
 
@@ -274,12 +362,10 @@ class ToolExecutor:
         try:
             result = fn(**params)
             result_dict = result if isinstance(result, dict) else {"result": result}
-
             self.idempotency.record_execution(tool_name, params, result_dict)
             rollback_id = self.guard.store_rollback_info(tool_name, params, result_dict)
             result_dict["_rollback_id"] = rollback_id
             result_dict["_confirmed"] = True
-
             self._store_in_memory(tool_name, params, result_dict)
             return json.dumps(result_dict, default=str)
         except Exception as e:
@@ -287,7 +373,6 @@ class ToolExecutor:
             return json.dumps({"error": str(e)})
 
     def _store_in_memory(self, tool_name: str, params: dict, result: dict):
-        """Store transaction in vector memory for long-term recall."""
         try:
             if tool_name == "create_invoice":
                 customer_id = params.get("customer_id") or result.get("customer_id", 0)
@@ -295,11 +380,7 @@ class ToolExecutor:
                     customer_id=customer_id,
                     customer_name=result.get("customer_name", f"عميل #{customer_id}"),
                     action="فاتورة جديدة",
-                    details={
-                        "invoice_id": result.get("invoice_id") or result.get("id"),
-                        "total": result.get("total", 0),
-                        "items": params.get("items", []),
-                    },
+                    details={"invoice_id": result.get("invoice_id") or result.get("id"), "total": result.get("total", 0), "items": params.get("items", [])},
                 )
             elif tool_name == "record_payment":
                 self.vector_memory.store_transaction_fact(
@@ -311,12 +392,22 @@ class ToolExecutor:
             elif tool_name == "create_customer":
                 name = params.get("name", "")
                 customer_id = result.get("customer_id") or result.get("id", 0)
-                phone = params.get("phone", "غير محدد")
-                address = params.get("address", "غير محدد")
                 self.vector_memory.store_customer_fact(
-                    customer_id=customer_id,
-                    name=name,
-                    fact=f"عميل جديد. تليفون: {phone}. عنوان: {address}",
+                    customer_id=customer_id, name=name,
+                    fact=f"عميل جديد. تليفون: {params.get('phone', 'غير محدد')}. عنوان: {params.get('address', 'غير محدد')}",
+                )
+            elif tool_name == "create_purchase_invoice":
+                self.vector_memory.store_transaction_fact(
+                    customer_id=params.get("supplier_id", 0),
+                    customer_name=f"مورد #{params.get('supplier_id', 0)}",
+                    action="فاتورة مشتريات",
+                    details={"purchase_invoice_id": result.get("purchase_invoice_id"), "total": result.get("total_amount", 0), "items_count": len(params.get("items", []))},
+                )
+            elif tool_name == "create_expense":
+                self.vector_memory.store_transaction_fact(
+                    customer_id=0, customer_name="مصروفات",
+                    action="مصروف جديد",
+                    details={"expense_id": result.get("expense_id"), "name": params.get("name"), "amount": params.get("amount", 0), "category": params.get("category")},
                 )
         except Exception as e:
             logger.warning(f"Memory store failed (non-critical): {e}")
