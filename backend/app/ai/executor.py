@@ -152,20 +152,9 @@ class ToolExecutor:
         }
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a tool by name with full safety stack.
-
-        Order:
-        1. Permission check
-        2. Amount check (financial tools)
-        3. Idempotency (return cached if duplicate)
-        4. Confirmation gate (return preview if sensitive)
-        5. Execute + audit
-        6. Record idempotency + rollback + memory
-        """
-        # Start audit entry
+        """Execute a tool by name with full safety stack."""
         audit = self.observer.start(tool_name, tool_input)
 
-        # Handle confirmation separately (always allowed if tool was already permitted)
         if tool_name == "confirm_transaction":
             result = self._confirm_transaction(tool_input.get("confirmation_id", ""))
             self.observer.complete(audit, json.loads(result))
@@ -189,7 +178,7 @@ class ToolExecutor:
                 "tool": tool_name,
             })
 
-        # 2. Amount limit check (financial tools)
+        # 2. Amount limit check
         if tool_name in FINANCIAL_TOOLS:
             amount = FINANCIAL_TOOLS[tool_name](tool_input)
             try:
@@ -205,8 +194,7 @@ class ToolExecutor:
 
         # For write operations: apply remaining safety layers
         if tool_name in SENSITIVE_OPERATIONS:
-            result_str = self._execute_with_safety(tool_name, tool_input, fn, audit)
-            return result_str
+            return self._execute_with_safety(tool_name, tool_input, fn, audit)
 
         # Read operations: execute directly
         try:
@@ -228,11 +216,10 @@ class ToolExecutor:
             self.observer.complete(audit, cached)
             return json.dumps(cached, default=str)
 
-        # 4. Confirmation check (use role-specific threshold)
+        # 4. Confirmation check
         role_threshold = self.permissions.get_confirmation_threshold()
         needs_confirm = self.guard.needs_confirmation(tool_name, params)
 
-        # Also force confirmation if amount exceeds role threshold
         if tool_name in FINANCIAL_TOOLS:
             amount = FINANCIAL_TOOLS[tool_name](params)
             if amount > role_threshold:
@@ -255,7 +242,7 @@ class ToolExecutor:
             result = fn(**params)
             result_dict = result if isinstance(result, dict) else {"result": result}
 
-            # 6. Record for idempotency + rollback + memory
+            # 6. Record
             self.idempotency.record_execution(tool_name, params, result_dict)
             rollback_id = self.guard.store_rollback_info(tool_name, params, result_dict)
             result_dict["_rollback_id"] = rollback_id
@@ -294,7 +281,6 @@ class ToolExecutor:
             result_dict["_confirmed"] = True
 
             self._store_in_memory(tool_name, params, result_dict)
-
             return json.dumps(result_dict, default=str)
         except Exception as e:
             logger.error(f"Confirmed tool execution error [{tool_name}]: {e}")
@@ -325,9 +311,12 @@ class ToolExecutor:
             elif tool_name == "create_customer":
                 name = params.get("name", "")
                 customer_id = result.get("customer_id") or result.get("id", 0)
+                phone = params.get("phone", "غير محدد")
+                address = params.get("address", "غير محدد")
                 self.vector_memory.store_customer_fact(
-                    customer_id=customer_id,\n                    name=name,
-                    fact=f\"عميل جديد. تليفون: {params.get('phone', 'غير محدد')}. عنوان: {params.get('address', 'غير محدد')}\",
+                    customer_id=customer_id,
+                    name=name,
+                    fact=f"عميل جديد. تليفون: {phone}. عنوان: {address}",
                 )
         except Exception as e:
-            logger.warning(f\"Memory store failed (non-critical): {e}\")
+            logger.warning(f"Memory store failed (non-critical): {e}")
