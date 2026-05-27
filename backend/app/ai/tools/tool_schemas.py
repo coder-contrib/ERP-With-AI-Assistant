@@ -4,7 +4,7 @@ Execution is handled separately by ToolExecutor.
 """
 
 TOOL_SCHEMAS = [
-    # ─── Read: Sales ──────────────────────────────────────────────────
+    # ─── Read: Sales ──────────────────────────────────────────────────────
     {
         "name": "get_today_sales",
         "description": "Get today's sales summary including invoice count, total amount, and cash collected",
@@ -30,7 +30,7 @@ TOOL_SCHEMAS = [
         "description": "Get list of unpaid or partially paid invoices",
         "input_schema": {"type": "object", "properties": {"customer_id": {"type": "integer", "description": "Optional filter by customer"}}, "required": []},
     },
-    # ─── Read: Inventory ───────────────────────────────────────────────
+    # ─── Read: Inventory ───────────────────────────────────────────────────
     {
         "name": "get_stock_level",
         "description": "Get current stock level for a product across warehouses",
@@ -61,7 +61,7 @@ TOOL_SCHEMAS = [
         "description": "Get inventory valuation by warehouse",
         "input_schema": {"type": "object", "properties": {"warehouse_id": {"type": "integer"}}, "required": []},
     },
-    # ─── Read: Finance ─────────────────────────────────────────────────
+    # ─── Read: Finance ─────────────────────────────────────────────────────
     {
         "name": "get_profit_and_loss",
         "description": "Get profit and loss report for a date range",
@@ -97,7 +97,7 @@ TOOL_SCHEMAS = [
         "description": "Predict demand and days until stockout for a product",
         "input_schema": {"type": "object", "properties": {"product_id": {"type": "integer"}, "days_back": {"type": "integer", "default": 30}}, "required": ["product_id"]},
     },
-    # ─── Read: Search ───────────────────────────────────────────────────
+    # ─── Read: Search ───────────────────────────────────────────────────────
     {
         "name": "search_products",
         "description": "Search products by name",
@@ -108,7 +108,7 @@ TOOL_SCHEMAS = [
         "description": "Search customers by name",
         "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
     },
-    # ─── Write: Sales ──────────────────────────────────────────────────
+    # ─── Write: Sales ──────────────────────────────────────────────────────
     {
         "name": "create_invoice",
         "description": "Create a new sales invoice. Validates stock, deducts inventory, creates ledger entries, records payment.",
@@ -164,7 +164,7 @@ TOOL_SCHEMAS = [
             "required": ["invoice_id", "discount_amount"],
         },
     },
-    # ─── Write: Payments ───────────────────────────────────────────────
+    # ─── Write: Payments ───────────────────────────────────────────────────
     {
         "name": "record_payment",
         "description": "Record a customer payment against an invoice.",
@@ -192,7 +192,7 @@ TOOL_SCHEMAS = [
             "required": ["invoice_id", "amount"],
         },
     },
-    # ─── Write: Inventory ───────────────────────────────────────────────
+    # ─── Write: Inventory ───────────────────────────────────────────────────
     {
         "name": "update_stock",
         "description": "Add stock (receive goods) for a product in a warehouse.",
@@ -237,7 +237,7 @@ TOOL_SCHEMAS = [
             "required": ["product_id", "warehouse_id", "new_quantity"],
         },
     },
-    # ─── Write: CRM ────────────────────────────────────────────────────
+    # ─── Write: CRM ────────────────────────────────────────────────────────
     {
         "name": "create_customer",
         "description": "Create a new customer record.",
@@ -596,5 +596,273 @@ TOOL_SCHEMAS = [
             "properties": {"product_id": {"type": "integer"}},
             "required": ["product_id"],
         },
+    },
+    # ═══ ADMIN TOOLS — Categories ═══
+    {
+        "name": "list_categories",
+        "description": "List all product categories.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "create_category",
+        "description": "Create a new product category.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "update_category",
+        "description": "Update an existing product category's name or description.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category_id": {"type": "integer"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["category_id"],
+        },
+    },
+    {
+        "name": "delete_category",
+        "description": "Delete a product category.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"category_id": {"type": "integer"}},
+            "required": ["category_id"],
+        },
+    },
+    # ═══ ADMIN TOOLS — Reports ═══
+    {
+        "name": "get_monthly_profit",
+        "description": "Get monthly profit/loss breakdown for a year. Shows revenue, COGS, gross profit, expenses, net profit per month.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"year": {"type": "integer", "description": "Year (defaults to current year)"}},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_cash_flow",
+        "description": "Get cash flow report showing daily cash in/out and net flow for a date range.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                "end_date": {"type": "string", "description": "YYYY-MM-DD"},
+            },
+            "required": ["start_date", "end_date"],
+        },
+    },
+    {
+        "name": "get_waste_report",
+        "description": "Get waste/spoilage report showing damaged or lost products for a date range.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "YYYY-MM-DD (defaults to 30 days ago)"},
+                "end_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"},
+            },
+            "required": [],
+        },
+    },
+    # ═══ ADMIN TOOLS — Notifications ═══
+    {
+        "name": "get_notifications",
+        "description": "Get system notifications (low stock alerts, credit limit warnings, overdue payments).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "unread_only": {"type": "boolean", "default": False},
+                "limit": {"type": "integer", "default": 50},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "mark_notification_read",
+        "description": "Mark a specific notification as read.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"notification_id": {"type": "integer"}},
+            "required": ["notification_id"],
+        },
+    },
+    {
+        "name": "mark_all_notifications_read",
+        "description": "Mark all notifications as read.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # ═══ ADMIN TOOLS — Alerts ═══
+    {
+        "name": "check_low_stock_alerts",
+        "description": "Scan inventory and generate low stock alerts for products below threshold.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"threshold": {"type": "number", "default": 10.0}},
+            "required": [],
+        },
+    },
+    {
+        "name": "check_credit_limit_alerts",
+        "description": "Check all customers and generate alerts for those who exceeded their credit limit.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "check_overdue_supplier_alerts",
+        "description": "Check for overdue supplier payments and generate alerts.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # ═══ ADMIN TOOLS — Anomaly Detection ═══
+    {
+        "name": "scan_anomalies",
+        "description": "Run full anomaly scan across revenue, expenses, and profit using z-scores and rolling averages.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "detect_revenue_anomaly",
+        "description": "Check if revenue for a specific date is anomalous compared to historical baselines.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"target_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"}},
+            "required": [],
+        },
+    },
+    {
+        "name": "detect_expense_anomaly",
+        "description": "Check if expenses for a specific date are anomalous compared to historical baselines.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"target_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"}},
+            "required": [],
+        },
+    },
+    # ═══ ADMIN TOOLS — Business Insights ═══
+    {
+        "name": "get_business_insights",
+        "description": "Get AI-powered business insights: risks, opportunities, and anomalies with severity levels.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "why_profit_dropped",
+        "description": "Detailed analysis of why profit dropped: compares periods, identifies causes, gives recommendations.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_top_risks",
+        "description": "Get top business risks (stock risks, credit risks, anomalies) sorted by severity.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "default": 5}},
+            "required": [],
+        },
+    },
+    # ═══ ADMIN TOOLS — Dashboard ═══
+    {
+        "name": "get_dashboard_summary",
+        "description": "Get full dashboard summary: today's sales/purchases/expenses, monthly revenue/profit, cash balance, receivables, payables, low stock count.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # ═══ ADMIN TOOLS — Accounting Tasks ═══
+    {
+        "name": "refresh_daily_summary",
+        "description": "Refresh the daily financial summary (recalculate revenue, COGS, profit for a date).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"target_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"}},
+            "required": [],
+        },
+    },
+    {
+        "name": "refresh_summary_range",
+        "description": "Refresh financial summaries for a date range.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                "end_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"},
+            },
+            "required": ["start_date"],
+        },
+    },
+    # ═══ ADMIN TOOLS — User Management ═══
+    {
+        "name": "list_users",
+        "description": "List all system users with their roles and active status.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "create_user",
+        "description": "Create a new system user with a role.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "full_name": {"type": "string"},
+                "username": {"type": "string"},
+                "password": {"type": "string"},
+                "role": {"type": "string", "enum": ["admin", "manager", "cashier", "warehouse_employee", "accountant"]},
+            },
+            "required": ["full_name", "username", "password", "role"],
+        },
+    },
+    {
+        "name": "deactivate_user",
+        "description": "Deactivate a user account (prevents login).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"user_id": {"type": "integer"}},
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "activate_user",
+        "description": "Reactivate a previously deactivated user account.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"user_id": {"type": "integer"}},
+            "required": ["user_id"],
+        },
+    },
+    {
+        "name": "reset_user_password",
+        "description": "Reset a user's password to default (123456). They should change it on next login.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"user_id": {"type": "integer"}},
+            "required": ["user_id"],
+        },
+    },
+    # ═══ ADMIN TOOLS — Ledger ═══
+    {
+        "name": "get_ledger_entries",
+        "description": "Get journal/ledger entries. Can filter by entity type (sales_invoice, purchase_invoice, expense, etc.) and entity ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {"type": "string", "description": "Filter by type: sales_invoice, purchase_invoice, customer_payment, supplier_payment, expense, sales_return, purchase_return"},
+                "entity_id": {"type": "integer", "description": "Filter by specific entity ID"},
+                "limit": {"type": "integer", "default": 50},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_account_balance",
+        "description": "Get the total debit, credit, and net balance for a specific ledger account (1=cash, 2=receivables, 3=inventory, 4=payables, 5=equity, 6=revenue, 7=sales_returns, 8=cogs, 9=purchase_returns, 10=expenses).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"account_id": {"type": "integer"}},
+            "required": ["account_id"],
+        },
+    },
+    {
+        "name": "get_trial_balance",
+        "description": "Get the full trial balance showing all accounts with their debit/credit totals. Verifies if books are balanced.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
     },
 ]

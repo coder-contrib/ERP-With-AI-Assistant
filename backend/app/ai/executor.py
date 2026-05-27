@@ -51,6 +51,7 @@ class ToolExecutor:
         from app.ai.tools.reporting_tools import ReportingTools
         from app.ai.tools.action_tools import ActionTools
         from app.ai.tools.extended_tools import ExtendedTools
+        from app.ai.tools.admin_tools import AdminTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
@@ -59,6 +60,7 @@ class ToolExecutor:
         reporting = ReportingTools(self.db)
         actions = ActionTools(self.db)
         extended = ExtendedTools(self.db)
+        admin = AdminTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         return {
@@ -260,6 +262,68 @@ class ToolExecutor:
                 notes=p.get("notes"),
             ),
             "get_product": lambda **p: extended.get_product(p["product_id"]),
+            # --- Admin: Categories ---
+            "list_categories": lambda **_: admin.list_categories(),
+            "create_category": lambda **p: admin.create_category(
+                name=p["name"],
+                description=p.get("description"),
+            ),
+            "update_category": lambda **p: admin.update_category(
+                category_id=p["category_id"],
+                name=p.get("name"),
+                description=p.get("description"),
+            ),
+            "delete_category": lambda **p: admin.delete_category(p["category_id"]),
+            # --- Admin: Reports ---
+            "get_monthly_profit": lambda **p: admin.get_monthly_profit(p.get("year")),
+            "get_cash_flow": lambda **p: admin.get_cash_flow(p["start_date"], p["end_date"]),
+            "get_waste_report": lambda **p: admin.get_waste_report(p.get("start_date"), p.get("end_date")),
+            # --- Admin: Notifications ---
+            "get_notifications": lambda **p: admin.get_notifications(
+                unread_only=p.get("unread_only", False),
+                limit=p.get("limit", 50),
+            ),
+            "mark_notification_read": lambda **p: admin.mark_notification_read(p["notification_id"]),
+            "mark_all_notifications_read": lambda **_: admin.mark_all_notifications_read(),
+            # --- Admin: Alerts ---
+            "check_low_stock_alerts": lambda **p: admin.check_low_stock_alerts(p.get("threshold", 10.0)),
+            "check_credit_limit_alerts": lambda **_: admin.check_credit_limit_alerts(),
+            "check_overdue_supplier_alerts": lambda **_: admin.check_overdue_supplier_alerts(),
+            # --- Admin: Anomaly Detection ---
+            "scan_anomalies": lambda **_: admin.scan_anomalies(),
+            "detect_revenue_anomaly": lambda **p: admin.detect_revenue_anomaly(p.get("target_date")),
+            "detect_expense_anomaly": lambda **p: admin.detect_expense_anomaly(p.get("target_date")),
+            # --- Admin: Business Insights ---
+            "get_business_insights": lambda **_: admin.get_business_insights(),
+            "why_profit_dropped": lambda **_: admin.why_profit_dropped(),
+            "get_top_risks": lambda **p: admin.get_top_risks(p.get("limit", 5)),
+            # --- Admin: Dashboard ---
+            "get_dashboard_summary": lambda **_: admin.get_dashboard_summary(),
+            # --- Admin: Accounting Tasks ---
+            "refresh_daily_summary": lambda **p: admin.refresh_daily_summary(p.get("target_date")),
+            "refresh_summary_range": lambda **p: admin.refresh_summary_range(
+                start_date=p["start_date"],
+                end_date=p.get("end_date"),
+            ),
+            # --- Admin: User Management ---
+            "list_users": lambda **_: admin.list_users(),
+            "create_user": lambda **p: admin.create_user(
+                full_name=p["full_name"],
+                username=p["username"],
+                password=p["password"],
+                role=p["role"],
+            ),
+            "deactivate_user": lambda **p: admin.deactivate_user(p["user_id"]),
+            "activate_user": lambda **p: admin.activate_user(p["user_id"]),
+            "reset_user_password": lambda **p: admin.reset_user_password(p["user_id"]),
+            # --- Admin: Ledger ---
+            "get_ledger_entries": lambda **p: admin.get_ledger_entries(
+                entity_type=p.get("entity_type"),
+                entity_id=p.get("entity_id"),
+                limit=p.get("limit", 50),
+            ),
+            "get_account_balance": lambda **p: admin.get_account_balance(p["account_id"]),
+            "get_trial_balance": lambda **_: admin.get_trial_balance(),
             # --- Safety: Confirmation ---
             "confirm_transaction": lambda **p: self._confirm_transaction(p["confirmation_id"]),
         }
