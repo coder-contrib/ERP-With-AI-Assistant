@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/print_helper.dart';
+import '../../../core/widgets/validation_error_banner.dart';
 import '../data/sales_repository.dart';
 
 class SaleDetailDrawer extends ConsumerStatefulWidget {
@@ -955,6 +956,7 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
   final _notesController = TextEditingController();
   bool _refundCash = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -970,6 +972,10 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
     }
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _clearError() {
+    if (_errorMessage != null) setState(() => _errorMessage = null);
   }
 
   double get _returnTotal {
@@ -990,9 +996,13 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
       final qty = double.tryParse(_qtyControllers[i].text) ?? 0;
       if (qty <= 0) continue;
       if (qty > widget.items[i].returnableQuantity) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.items[i].productName}: return qty exceeds returnable qty (${widget.items[i].returnableQuantity})')),
-        );
+        final maxQty = widget.items[i].returnableQuantity % 1 == 0
+            ? widget.items[i].returnableQuantity.toInt().toString()
+            : widget.items[i].returnableQuantity.toStringAsFixed(2);
+        final reqQty = qty % 1 == 0 ? qty.toInt().toString() : qty.toStringAsFixed(2);
+        setState(() {
+          _errorMessage = "Cannot return $reqQty of '${widget.items[i].productName}' — only $maxQty available for return.";
+        });
         return;
       }
       final total = qty * widget.items[i].unitPrice;
@@ -1005,9 +1015,9 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
     }
 
     if (returnItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one item to return')),
-      );
+      setState(() {
+        _errorMessage = 'Select at least one item to return.';
+      });
       return;
     }
 
@@ -1057,6 +1067,10 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    ValidationErrorBanner(
+                      message: _errorMessage,
+                      onDismiss: _clearError,
+                    ),
                     const Text('Select items to return:', style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
                     ...widget.items.asMap().entries.map((entry) {
@@ -1074,7 +1088,10 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
                           children: [
                             Checkbox(
                               value: _selected[i],
-                              onChanged: (v) => setState(() => _selected[i] = v ?? false),
+                              onChanged: (v) {
+                                setState(() => _selected[i] = v ?? false);
+                                _clearError();
+                              },
                               activeColor: AppColors.warning,
                             ),
                             Expanded(
@@ -1100,7 +1117,10 @@ class _ReturnItemsDialogState extends State<_ReturnItemsDialog> {
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     suffixText: item.unitType,
                                   ),
-                                  onChanged: (_) => setState(() {}),
+                                  onChanged: (_) {
+                                    setState(() {});
+                                    _clearError();
+                                  },
                                 ),
                               ),
                           ],
