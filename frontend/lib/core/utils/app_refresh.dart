@@ -38,6 +38,8 @@ void invalidateAfterExpense(WidgetRef ref) {
 
 void invalidateAfterPurchase(WidgetRef ref) {
   ref.invalidate(purchasesProvider);
+  ref.invalidate(productsProvider);
+  ref.invalidate(productsListProvider);
   invalidateDashboard(ref);
   ref.invalidate(inventoryDataProvider);
   ref.invalidate(reportsCashFlowProvider);
