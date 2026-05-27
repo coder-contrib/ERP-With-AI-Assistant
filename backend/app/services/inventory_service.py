@@ -74,6 +74,21 @@ class InventoryService:
         )
         self.cache.invalidate_stock(product_id, warehouse_id)
 
+    def record_purchase_return(self, product_id: int, warehouse_id: int, quantity: Decimal,
+                               unit_type: str, cost_per_unit: Decimal, reference_id: int):
+        self.repo.create_transaction(
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transaction_type="purchase_return",
+            direction="OUT",
+            quantity=quantity,
+            unit_type=unit_type,
+            cost_per_unit=cost_per_unit,
+            reference_type="purchase_return",
+            reference_id=reference_id,
+        )
+        self.cache.invalidate_stock(product_id, warehouse_id)
+
     def record_opening_stock(self, product_id: int, warehouse_id: int, quantity: Decimal,
                              unit_type: str, cost_per_unit: Decimal):
         self.repo.create_transaction(
