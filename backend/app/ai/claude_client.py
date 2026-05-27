@@ -22,6 +22,7 @@ class ClaudeClient:
 
     def get_tools(self) -> list[dict]:
         return [
+            # ─── Read Tools (Sales) ──────────────────────────────────────────
             {
                 "name": "get_today_sales",
                 "description": "Get today's sales summary including invoice count, total amount, and cash collected",
@@ -97,6 +98,169 @@ class ClaudeClient:
                 "description": "Search customers by name",
                 "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
             },
+            # ─── Action Tools (Sales) ────────────────────────────────────────
+            {
+                "name": "create_invoice",
+                "description": "Create a new sales invoice. Validates stock, deducts inventory, creates ledger entries, and records payment. Items is an array of objects with product_id, quantity, and optionally unit_price, unit_type, discount.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {"type": "integer", "description": "Customer ID (null for walk-in)"},
+                        "items": {
+                            "type": "array",
+                            "description": "List of items to sell",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "product_id": {"type": "integer"},
+                                    "quantity": {"type": "number"},
+                                    "unit_price": {"type": "number", "description": "Optional, uses product selling price if omitted"},
+                                    "unit_type": {"type": "string", "default": "meter"},
+                                    "discount": {"type": "number", "default": 0},
+                                },
+                                "required": ["product_id", "quantity"],
+                            },
+                        },
+                        "payment_type": {"type": "string", "enum": ["cash", "credit", "mixed"], "default": "cash"},
+                        "warehouse_id": {"type": "integer", "default": 1},
+                        "discount": {"type": "number", "default": 0, "description": "Overall invoice discount"},
+                        "paid_amount": {"type": "number", "description": "Amount paid now. Defaults to full amount for cash, 0 for credit"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["items"],
+                },
+            },
+            {
+                "name": "cancel_invoice",
+                "description": "Cancel a sales invoice. Restores stock, reverses cash transactions, and updates customer balance.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "invoice_id": {"type": "integer", "description": "Invoice ID to cancel"},
+                        "reason": {"type": "string", "description": "Reason for cancellation"},
+                    },
+                    "required": ["invoice_id"],
+                },
+            },
+            {
+                "name": "apply_discount",
+                "description": "Apply or change discount on an existing invoice. Recalculates total and remaining amount.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "invoice_id": {"type": "integer"},
+                        "discount_amount": {"type": "number", "description": "New discount amount in EGP"},
+                    },
+                    "required": ["invoice_id", "discount_amount"],
+                },
+            },
+            # ─── Action Tools (Payments) ─────────────────────────────────────
+            {
+                "name": "record_payment",
+                "description": "Record a customer payment against an invoice. Updates invoice status, customer balance, and cash ledger.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {"type": "integer"},
+                        "invoice_id": {"type": "integer"},
+                        "amount": {"type": "number", "description": "Payment amount in EGP"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["customer_id", "invoice_id", "amount"],
+                },
+            },
+            {
+                "name": "refund_payment",
+                "description": "Refund money back to customer for an invoice. Creates cash-out transaction and updates balances.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "invoice_id": {"type": "integer"},
+                        "amount": {"type": "number", "description": "Refund amount in EGP"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["invoice_id", "amount"],
+                },
+            },
+            # ─── Action Tools (Inventory) ────────────────────────────────────
+            {
+                "name": "update_stock",
+                "description": "Add stock (receive goods) for a product in a warehouse. Creates inventory transaction and updates cache.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "warehouse_id": {"type": "integer"},
+                        "quantity": {"type": "number", "description": "Quantity to add"},
+                        "cost_per_unit": {"type": "number", "default": 0, "description": "Purchase cost per unit"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["product_id", "warehouse_id", "quantity"],
+                },
+            },
+            {
+                "name": "transfer_stock",
+                "description": "Transfer stock between warehouses. Validates source availability and creates transfer record.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "from_warehouse_id": {"type": "integer"},
+                        "to_warehouse_id": {"type": "integer"},
+                        "quantity": {"type": "number"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
+                },
+            },
+            {
+                "name": "adjust_stock",
+                "description": "Set stock to a specific quantity (manual correction). Use for physical count adjustments, wastage, or corrections.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "warehouse_id": {"type": "integer"},
+                        "new_quantity": {"type": "number", "description": "The corrected quantity after adjustment"},
+                        "reason": {"type": "string", "description": "Reason for adjustment (e.g. physical_count, wastage, damage)"},
+                    },
+                    "required": ["product_id", "warehouse_id", "new_quantity"],
+                },
+            },
+            # ─── Action Tools (CRM) ─────────────────────────────────────────
+            {
+                "name": "create_customer",
+                "description": "Create a new customer record in the system.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Customer full name"},
+                        "phone": {"type": "string"},
+                        "address": {"type": "string"},
+                        "credit_limit": {"type": "number", "default": 0, "description": "Maximum credit in EGP"},
+                        "payment_terms": {"type": "integer", "default": 0, "description": "Payment terms in days"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["name"],
+                },
+            },
+            {
+                "name": "update_customer",
+                "description": "Update an existing customer's information. Only provide fields that need to change.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {"type": "integer"},
+                        "name": {"type": "string"},
+                        "phone": {"type": "string"},
+                        "address": {"type": "string"},
+                        "credit_limit": {"type": "number"},
+                        "payment_terms": {"type": "integer"},
+                        "notes": {"type": "string"},
+                    },
+                    "required": ["customer_id"],
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict) -> str:
@@ -104,15 +268,18 @@ class ClaudeClient:
         from app.ai.tools.stock_tools import StockTools
         from app.ai.tools.finance_tools import FinanceTools
         from app.ai.tools.reporting_tools import ReportingTools
+        from app.ai.tools.action_tools import ActionTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
         stock = StockTools(self.db)
         finance = FinanceTools(self.db)
         reporting = ReportingTools(self.db)
+        actions = ActionTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         tool_map = {
+            # Read tools
             "get_today_sales": lambda **_: sales.get_today_sales(),
             "get_customer_info": lambda **p: sales.get_customer_info(p["customer_id"]),
             "get_customer_history": lambda **p: sales.get_customer_history(p["customer_id"], p.get("limit", 10)),
@@ -128,6 +295,65 @@ class ClaudeClient:
             "demand_forecast": lambda **p: reporting.demand_forecast(p["product_id"], p.get("days_back", 30)),
             "search_products": lambda **p: retriever.search_products(p["query"]),
             "search_customers": lambda **p: retriever.search_customers(p["query"]),
+            # Action tools - Sales
+            "create_invoice": lambda **p: actions.create_invoice(
+                customer_id=p.get("customer_id"),
+                items=p["items"],
+                payment_type=p.get("payment_type", "cash"),
+                warehouse_id=p.get("warehouse_id", 1),
+                discount=p.get("discount", 0),
+                paid_amount=p.get("paid_amount"),
+                notes=p.get("notes"),
+            ),
+            "cancel_invoice": lambda **p: actions.cancel_invoice(p["invoice_id"], p.get("reason")),
+            "apply_discount": lambda **p: actions.apply_discount(p["invoice_id"], p["discount_amount"]),
+            # Action tools - Payments
+            "record_payment": lambda **p: actions.record_payment(
+                customer_id=p["customer_id"],
+                invoice_id=p["invoice_id"],
+                amount=p["amount"],
+                notes=p.get("notes"),
+            ),
+            "refund_payment": lambda **p: actions.refund_payment(p["invoice_id"], p["amount"], p.get("reason")),
+            # Action tools - Inventory
+            "update_stock": lambda **p: actions.update_stock(
+                product_id=p["product_id"],
+                warehouse_id=p["warehouse_id"],
+                quantity=p["quantity"],
+                cost_per_unit=p.get("cost_per_unit", 0),
+                notes=p.get("notes"),
+            ),
+            "transfer_stock": lambda **p: actions.transfer_stock(
+                product_id=p["product_id"],
+                from_warehouse_id=p["from_warehouse_id"],
+                to_warehouse_id=p["to_warehouse_id"],
+                quantity=p["quantity"],
+                notes=p.get("notes"),
+            ),
+            "adjust_stock": lambda **p: actions.adjust_stock(
+                product_id=p["product_id"],
+                warehouse_id=p["warehouse_id"],
+                new_quantity=p["new_quantity"],
+                reason=p.get("reason", "manual_adjustment"),
+            ),
+            # Action tools - CRM
+            "create_customer": lambda **p: actions.create_customer(
+                name=p["name"],
+                phone=p.get("phone"),
+                address=p.get("address"),
+                credit_limit=p.get("credit_limit", 0),
+                payment_terms=p.get("payment_terms", 0),
+                notes=p.get("notes"),
+            ),
+            "update_customer": lambda **p: actions.update_customer(
+                customer_id=p["customer_id"],
+                name=p.get("name"),
+                phone=p.get("phone"),
+                address=p.get("address"),
+                credit_limit=p.get("credit_limit"),
+                payment_terms=p.get("payment_terms"),
+                notes=p.get("notes"),
+            ),
         }
 
         fn = tool_map.get(tool_name)
