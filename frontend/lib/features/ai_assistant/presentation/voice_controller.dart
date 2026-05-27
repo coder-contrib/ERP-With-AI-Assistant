@@ -80,11 +80,28 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
     ],
   ));
 
+  /// Barge-in: interrupt AI while speaking and immediately start listening
+  Future<void> bargeIn() async {
+    // Send barge-in signal to backend to cancel TTS/processing
+    _voiceService.sendJsonViaWs({'type': 'barge_in'});
+
+    state = state.copyWith(
+      voiceState: VoiceState.idle,
+      isStreaming: false,
+      partialTranscription: null,
+    );
+
+    // Immediately start streaming (new user input)
+    await startStreaming();
+  }
+
   /// Start live streaming mode: audio is streamed in real-time for transcription
   Future<void> startStreaming() async {
-    // Connect WebSocket
-    _voiceService.connectWebSocket(state.sessionId);
-    _eventSub = _voiceService.events.listen(_handleEvent);
+    // Connect WebSocket if not already connected
+    if (!state.isConnected) {
+      _voiceService.connectWebSocket(state.sessionId);
+      _eventSub = _voiceService.events.listen(_handleEvent);
+    }
 
     // Tell backend to start streaming session
     _voiceService.sendJsonViaWs({'type': 'stream_start', 'language': 'ar'});
@@ -173,6 +190,10 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
 
       case 'ai_finished':
         state = state.copyWith(voiceState: VoiceState.idle);
+        break;
+
+      case 'barge_in_ack':
+        // Backend confirmed barge-in, we're already in listening state
         break;
 
       case 'error':
