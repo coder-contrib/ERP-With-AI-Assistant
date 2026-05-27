@@ -271,4 +271,357 @@ TOOL_SCHEMAS = [
             "required": ["customer_id"],
         },
     },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Opening Balances
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "set_customer_opening_balance",
+        "description": "Set the opening balance (رصيد أول المدة) for a customer. Used for initial account setup.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "integer", "description": "Customer ID"},
+                "amount": {"type": "number", "description": "Balance amount in EGP"},
+                "balance_type": {"type": "string", "enum": ["debit", "credit"], "default": "debit", "description": "debit = customer owes us, credit = we owe customer"},
+                "notes": {"type": "string"},
+            },
+            "required": ["customer_id", "amount"],
+        },
+    },
+    {
+        "name": "set_supplier_opening_balance",
+        "description": "Set the opening balance (رصيد أول المدة) for a supplier. Used for initial account setup.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "supplier_id": {"type": "integer", "description": "Supplier ID"},
+                "amount": {"type": "number", "description": "Balance amount in EGP"},
+                "balance_type": {"type": "string", "enum": ["debit", "credit"], "default": "credit", "description": "credit = we owe supplier, debit = supplier owes us"},
+                "notes": {"type": "string"},
+            },
+            "required": ["supplier_id", "amount"],
+        },
+    },
+    {
+        "name": "set_cash_opening_balance",
+        "description": "Set the opening cash balance (رصيد الصندوق أول المدة). Used for initial setup.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "Opening cash amount in EGP"},
+                "account_name": {"type": "string", "default": "الصندوق الرئيسي"},
+                "notes": {"type": "string"},
+            },
+            "required": ["amount"],
+        },
+    },
+    {
+        "name": "set_opening_inventory",
+        "description": "Set the opening inventory (جرد أول المدة) for a product in a warehouse. Sets initial stock quantity and cost.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "integer"},
+                "warehouse_id": {"type": "integer"},
+                "quantity": {"type": "number", "description": "Opening stock quantity"},
+                "cost_per_unit": {"type": "number", "description": "Cost per unit in EGP"},
+                "notes": {"type": "string"},
+            },
+            "required": ["product_id", "warehouse_id", "quantity", "cost_per_unit"],
+        },
+    },
+    {
+        "name": "get_opening_balances",
+        "description": "Get all opening balances. Optionally filter by entity type (customer, supplier, cash, inventory).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {"type": "string", "enum": ["customer", "supplier", "cash", "inventory"], "description": "Optional filter"},
+            },
+            "required": [],
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Expenses
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "create_expense",
+        "description": "Create a new expense record (مصروف). Deducts from cash balance.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Expense name/description"},
+                "amount": {"type": "number", "description": "Amount in EGP"},
+                "category": {"type": "string", "default": "Miscellaneous", "description": "Expense category"},
+                "notes": {"type": "string"},
+                "expense_date": {"type": "string", "description": "YYYY-MM-DD (defaults to today)"},
+            },
+            "required": ["name", "amount"],
+        },
+    },
+    {
+        "name": "list_expenses",
+        "description": "List expenses with optional filters by date range, category, or search term.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+                "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+                "category": {"type": "string"},
+                "search": {"type": "string"},
+                "limit": {"type": "integer", "default": 20},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_expense_summary",
+        "description": "Get expense summary: total today, total this month, highest spending category.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Sales Invoice Retrieval
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "list_sales_invoices",
+        "description": "List recent sales invoices with optional status filter (paid, unpaid, partial).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 20},
+                "status": {"type": "string", "enum": ["paid", "unpaid", "partial"], "description": "Optional payment status filter"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_sales_invoice",
+        "description": "Get full details of a specific sales invoice including customer info, totals, and payment status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "invoice_id": {"type": "integer"},
+            },
+            "required": ["invoice_id"],
+        },
+    },
+    {
+        "name": "get_invoice_items",
+        "description": "Get all line items (products) within a specific sales invoice.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "invoice_id": {"type": "integer"},
+            },
+            "required": ["invoice_id"],
+        },
+    },
+    {
+        "name": "create_sales_return",
+        "description": "Create a sales return (مرتجع مبيعات) for items from a sales invoice.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "invoice_id": {"type": "integer", "description": "Original sales invoice ID"},
+                "items": {
+                    "type": "array",
+                    "description": "Items to return",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "integer"},
+                            "quantity": {"type": "number"},
+                            "return_price": {"type": "number", "description": "Return price per unit (defaults to original price)"},
+                        },
+                        "required": ["product_id", "quantity"],
+                    },
+                },
+                "reason": {"type": "string"},
+            },
+            "required": ["invoice_id", "items"],
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Purchase Invoices
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "list_purchase_invoices",
+        "description": "List recent purchase invoices from suppliers.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 20},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_purchase_invoice",
+        "description": "Get full details of a specific purchase invoice including supplier info and payment status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "purchase_invoice_id": {"type": "integer"},
+            },
+            "required": ["purchase_invoice_id"],
+        },
+    },
+    {
+        "name": "get_purchase_items",
+        "description": "Get all line items (products) within a specific purchase invoice.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "purchase_invoice_id": {"type": "integer"},
+            },
+            "required": ["purchase_invoice_id"],
+        },
+    },
+    {
+        "name": "create_purchase_invoice",
+        "description": "Create a new purchase invoice (فاتورة مشتريات). Adds stock to inventory.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "supplier_id": {"type": "integer"},
+                "items": {
+                    "type": "array",
+                    "description": "Items purchased",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "integer"},
+                            "quantity": {"type": "number"},
+                            "purchase_price": {"type": "number"},
+                        },
+                        "required": ["product_id", "quantity", "purchase_price"],
+                    },
+                },
+                "payment_type": {"type": "string", "enum": ["cash", "credit", "mixed"], "default": "cash"},
+                "paid_amount": {"type": "number"},
+                "warehouse_id": {"type": "integer", "default": 1},
+                "notes": {"type": "string"},
+            },
+            "required": ["supplier_id", "items"],
+        },
+    },
+    {
+        "name": "create_purchase_return",
+        "description": "Create a purchase return (مرتجع مشتريات) for items from a purchase invoice.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "purchase_invoice_id": {"type": "integer", "description": "Original purchase invoice ID"},
+                "items": {
+                    "type": "array",
+                    "description": "Items to return to supplier",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "integer"},
+                            "quantity": {"type": "number"},
+                            "return_price": {"type": "number"},
+                        },
+                        "required": ["product_id", "quantity"],
+                    },
+                },
+                "reason": {"type": "string"},
+            },
+            "required": ["purchase_invoice_id", "items"],
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Suppliers
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "create_supplier",
+        "description": "Create a new supplier (مورد جديد).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Supplier name"},
+                "phone": {"type": "string"},
+                "address": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "update_supplier",
+        "description": "Update an existing supplier's information.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "supplier_id": {"type": "integer"},
+                "name": {"type": "string"},
+                "phone": {"type": "string"},
+                "address": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["supplier_id"],
+        },
+    },
+    {
+        "name": "search_suppliers",
+        "description": "Search suppliers by name or phone number.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXTENDED TOOLS — Products
+    # ═══════════════════════════════════════════════════════════════════════════
+    {
+        "name": "create_product",
+        "description": "Create a new product (منتج جديد) in the system.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Product name"},
+                "sku": {"type": "string"},
+                "category_id": {"type": "integer"},
+                "selling_price": {"type": "number", "default": 0},
+                "cost_price": {"type": "number", "default": 0},
+                "base_unit": {"type": "string", "default": "meter", "description": "Unit of measure (meter, piece, kg, etc.)"},
+                "barcode": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "update_product",
+        "description": "Update an existing product's information (price, name, category, etc.).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "integer"},
+                "name": {"type": "string"},
+                "selling_price": {"type": "number"},
+                "cost_price": {"type": "number"},
+                "category_id": {"type": "integer"},
+                "base_unit": {"type": "string"},
+                "barcode": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+            "required": ["product_id"],
+        },
+    },
+    {
+        "name": "get_product",
+        "description": "Get detailed product information including stock levels across all warehouses.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "integer"},
+            },
+            "required": ["product_id"],
+        },
+    },
 ]
