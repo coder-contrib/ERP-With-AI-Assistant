@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/notifications/presentation/notifications_provider.dart';
 
 final sidebarCollapsedProvider = StateProvider<bool>((ref) => false);
@@ -14,6 +15,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final collapsed = ref.watch(sidebarCollapsedProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final userRole = ref.watch(authProvider).token?.role ?? '';
 
     return Scaffold(
       body: Row(
@@ -60,6 +62,10 @@ class AppShell extends ConsumerWidget {
                       const Divider(height: 24),
                       _navItem(context, ref, '/voice-ai', Icons.record_voice_over_rounded, 'Voice AI', collapsed, highlight: true),
                       _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Chat', collapsed),
+                      if (userRole == 'admin') ...[
+                        const Divider(height: 24),
+                        _navItem(context, ref, '/ai-audit', Icons.admin_panel_settings_rounded, 'AI Audit', collapsed, highlight: true),
+                      ],
                     ],
                   ),
                 ),
@@ -99,15 +105,6 @@ class AppShell extends ConsumerWidget {
                         ),
                       ),
                       const Spacer(),
-                      // Voice AI button
-                      IconButton(
-                        onPressed: () => context.go('/voice-ai'),
-                        icon: const Icon(Icons.record_voice_over_rounded),
-                        tooltip: 'Voice AI',
-                        style: IconButton.styleFrom(foregroundColor: AppColors.primary),
-                      ),
-                      const SizedBox(width: 4),
-                      // AI button
                       IconButton(
                         onPressed: () => context.go('/voice-ai'),
                         icon: const Icon(Icons.record_voice_over_rounded),
