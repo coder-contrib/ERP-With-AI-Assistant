@@ -16,6 +16,7 @@ import '../../features/reports/presentation/reports_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/ai_assistant/presentation/ai_assistant_page.dart';
 import '../../features/ai_assistant/presentation/voice_chat_page.dart';
+import '../../features/ai_audit/presentation/ai_audit_page.dart';
 import '../../shared/layouts/app_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -49,6 +50,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/notifications', builder: (_, __) => const NotificationsPage()),
           GoRoute(path: '/ai', builder: (_, __) => const AIAssistantPage()),
           GoRoute(path: '/voice-ai', builder: (_, __) => const VoiceChatPage()),
+          GoRoute(path: '/ai-audit', builder: (_, __) => const AIAuditPage()),
         ],
       ),
     ],
