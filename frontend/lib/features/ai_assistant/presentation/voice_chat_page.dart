@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:record/record.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/ai_repository.dart';
 import 'voice_controller.dart';
@@ -19,8 +21,10 @@ class VoiceChatPage extends ConsumerStatefulWidget {
 class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProviderStateMixin {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
+  final _audioRecorder = AudioRecorder();
   bool _isRecording = false;
   bool _showTextInput = false;
+  bool _hasPermission = false;
   late AnimationController _bgAnimController;
   late Animation<double> _bgAnimation;
 
@@ -31,12 +35,19 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
     _bgAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _bgAnimController, curve: Curves.easeInOut),
     );
+    _checkPermission();
+  }
+
+  Future<void> _checkPermission() async {
+    final status = await Permission.microphone.request();
+    setState(() => _hasPermission = status.isGranted);
   }
 
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _audioRecorder.dispose();
     _bgAnimController.dispose();
     super.dispose();
   }
@@ -53,25 +64,65 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
     });
   }
 
-  void _toggleRecording() {
-    setState(() => _isRecording = !_isRecording);
+  Future<void> _toggleRecording() async {
+    if (!_hasPermission) {
+      await _checkPermission();
+      if (!_hasPermission) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('يجب السماح بالوصول للميكروفون')),
+        );
+        return;
+      }
+    }
+
     if (_isRecording) {
-      ref.read(voiceChatProvider.notifier).startListening();
-      _bgAnimController.repeat(reverse: true);
-    } else {
-      ref.read(voiceChatProvider.notifier).stopListening();
+      // Stop recording and process
+      setState(() => _isRecording = false);
       _bgAnimController.stop();
       _bgAnimController.reset();
-      // Simulate sending recorded audio (in production, use record package)
-      _simulateVoiceInput();
+      ref.read(voiceChatProvider.notifier).stopListening();
+
+      final path = await _audioRecorder.stop();
+      if (path != null) {
+        // Read the recorded file as bytes
+        final file = await _readFileAsBytes(path);
+        if (file != null) {
+          ref.read(voiceChatProvider.notifier).processAudio(file);
+        }
+      }
+    } else {
+      // Start recording
+      if (await _audioRecorder.hasPermission()) {
+        setState(() => _isRecording = true);
+        ref.read(voiceChatProvider.notifier).startListening();
+        _bgAnimController.repeat(reverse: true);
+
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+          path: '${DateTime.now().millisecondsSinceEpoch}.wav',
+        );
+      }
     }
   }
 
-  void _simulateVoiceInput() {
-    // In production: use the `record` package to capture audio
-    // Then call: ref.read(voiceChatProvider.notifier).processAudio(audioBytes);
-    // For now, show text input as fallback
-    setState(() => _showTextInput = true);
+  Future<Uint8List?> _readFileAsBytes(String path) async {
+    try {
+      final file = await java_io_File(path);
+      return await file.readAsBytes();
+    } catch (_) {
+      // Fallback: use dart:io directly
+      try {
+        final f = File(path);
+        return await f.readAsBytes();
+      } catch (e) {
+        debugPrint('Error reading audio file: $e');
+        return null;
+      }
+    }
   }
 
   void _sendText() {
@@ -190,7 +241,7 @@ class _VoiceChatPageState extends ConsumerState<VoiceChatPage> with TickerProvid
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                child: const Text('Claude + Whisper + ElevenLabs', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                child: const Text('Claude + Whisper', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500)),
               ),
             ]),
           ]),
@@ -402,7 +453,6 @@ class _VoiceChatBubble extends StatelessWidget {
   TextDirection _detectDirection(String text) {
     if (text.isEmpty) return TextDirection.ltr;
     final firstChar = text.trim().codeUnitAt(0);
-    // Arabic Unicode range
     if (firstChar >= 0x0600 && firstChar <= 0x06FF) return TextDirection.rtl;
     if (firstChar >= 0xFE70 && firstChar <= 0xFEFF) return TextDirection.rtl;
     return TextDirection.ltr;
