@@ -62,16 +62,14 @@ class NotificationService:
         self.db.flush()
         return notif
 
-    def _clear_unread_by_type(self, notification_type: str):
-        self.db.query(Notification).filter(
+    def _already_notified(self, notification_type: str, entity_type: str, entity_id: int) -> bool:
+        return self.db.query(Notification).filter(
             Notification.notification_type == notification_type,
-            Notification.is_read == False,
-        ).delete()
-        self.db.flush()
+            Notification.entity_type == entity_type,
+            Notification.entity_id == entity_id,
+        ).first() is not None
 
     def check_low_stock(self, threshold: float = 10.0) -> int:
-        self._clear_unread_by_type("low_stock")
-
         results = self.db.query(
             InventoryCache.product_id,
             Product.product_name,
@@ -91,6 +89,8 @@ class NotificationService:
             if r.product_id in seen_products:
                 continue
             seen_products.add(r.product_id)
+            if self._already_notified("low_stock", "product", r.product_id):
+                continue
             self.create(
                 notification_type="low_stock",
                 severity="warning",
@@ -104,8 +104,6 @@ class NotificationService:
         return count
 
     def check_credit_limit_exceeded(self) -> int:
-        self._clear_unread_by_type("credit_limit_exceeded")
-
         results = self.db.query(Customer).filter(
             Customer.credit_limit > 0,
             Customer.current_balance > Customer.credit_limit,
@@ -113,6 +111,8 @@ class NotificationService:
 
         count = 0
         for c in results:
+            if self._already_notified("credit_limit_exceeded", "customer", c.customer_id):
+                continue
             over = c.current_balance - c.credit_limit
             self.create(
                 notification_type="credit_limit_exceeded",
@@ -127,8 +127,6 @@ class NotificationService:
         return count
 
     def check_overdue_supplier_payments(self) -> int:
-        self._clear_unread_by_type("overdue_supplier")
-
         results = self.db.query(Supplier).filter(
             Supplier.current_balance > 0,
             Supplier.payment_terms > 0,
@@ -143,6 +141,8 @@ class NotificationService:
                 days_since = 999
 
             if days_since > s.payment_terms:
+                if self._already_notified("overdue_supplier", "supplier", s.supplier_id):
+                    continue
                 self.create(
                     notification_type="overdue_supplier",
                     severity="warning",
