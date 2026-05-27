@@ -18,6 +18,7 @@ class VoiceChatState {
   final bool isConnected;
   final String? errorMessage;
   final bool isStreaming;
+  final bool shouldStopAudio;
 
   VoiceChatState({
     this.voiceState = VoiceState.idle,
@@ -29,6 +30,7 @@ class VoiceChatState {
     this.isConnected = false,
     this.errorMessage,
     this.isStreaming = false,
+    this.shouldStopAudio = false,
   });
 
   VoiceChatState copyWith({
@@ -41,6 +43,7 @@ class VoiceChatState {
     bool? isConnected,
     String? errorMessage,
     bool? isStreaming,
+    bool? shouldStopAudio,
   }) {
     return VoiceChatState(
       voiceState: voiceState ?? this.voiceState,
@@ -52,6 +55,7 @@ class VoiceChatState {
       isConnected: isConnected ?? this.isConnected,
       errorMessage: errorMessage,
       isStreaming: isStreaming ?? this.isStreaming,
+      shouldStopAudio: shouldStopAudio ?? this.shouldStopAudio,
     );
   }
 }
@@ -82,14 +86,20 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
 
   /// Barge-in: interrupt AI while speaking and immediately start listening
   Future<void> bargeIn() async {
-    // Send barge-in signal to backend to cancel TTS/processing
-    _voiceService.sendJsonViaWs({'type': 'barge_in'});
-
+    // Signal to stop audio playback immediately
     state = state.copyWith(
+      shouldStopAudio: true,
       voiceState: VoiceState.idle,
       isStreaming: false,
       partialTranscription: null,
     );
+
+    // Send barge-in signal to backend to cancel TTS/processing
+    _voiceService.sendJsonViaWs({'type': 'barge_in'});
+
+    // Clear the stop flag after a frame
+    await Future.delayed(const Duration(milliseconds: 50));
+    state = state.copyWith(shouldStopAudio: false);
 
     // Immediately start streaming (new user input)
     await startStreaming();
@@ -192,8 +202,21 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
         state = state.copyWith(voiceState: VoiceState.idle);
         break;
 
+      case 'stop_audio':
+        // Backend says stop playing audio immediately (barge-in cleanup)
+        state = state.copyWith(
+          shouldStopAudio: true,
+          voiceState: VoiceState.idle,
+        );
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) {
+            state = state.copyWith(shouldStopAudio: false);
+          }
+        });
+        break;
+
       case 'barge_in_ack':
-        // Backend confirmed barge-in, we're already in listening state
+        // Backend confirmed barge-in, we're already transitioning to listening
         break;
 
       case 'error':
