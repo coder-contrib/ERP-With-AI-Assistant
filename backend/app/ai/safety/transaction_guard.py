@@ -27,6 +27,15 @@ SENSITIVE_OPERATIONS = {
     "create_purchase_return",
     "create_supplier",
     "create_product",
+    # Admin sensitive operations
+    "create_category",
+    "delete_category",
+    "create_user",
+    "deactivate_user",
+    "activate_user",
+    "reset_user_password",
+    "refresh_daily_summary",
+    "refresh_summary_range",
 }
 
 CONFIRMATION_THRESHOLDS = {
@@ -43,6 +52,14 @@ CONFIRMATION_THRESHOLDS = {
     "create_purchase_invoice": lambda params: sum(i.get("quantity", 0) * i.get("purchase_price", 0) for i in params.get("items", [])) > 10000,
     "create_sales_return": lambda params: True,
     "create_purchase_return": lambda params: True,
+    # Admin thresholds
+    "create_user": lambda params: True,
+    "deactivate_user": lambda params: True,
+    "activate_user": lambda params: True,
+    "reset_user_password": lambda params: True,
+    "delete_category": lambda params: True,
+    "refresh_daily_summary": lambda params: False,
+    "refresh_summary_range": lambda params: False,
 }
 
 PENDING_KEY_PREFIX = "ai:pending_tx:"
@@ -97,6 +114,13 @@ class TransactionGuard:
         elif tool_name == "set_opening_inventory":
             preview["quantity"] = params.get("quantity", 0)
             preview["total_value"] = params.get("quantity", 0) * params.get("cost_per_unit", 0)
+        elif tool_name == "create_user":
+            preview["username"] = params.get("username", "")
+            preview["role"] = params.get("role", "")
+        elif tool_name in ("deactivate_user", "activate_user", "reset_user_password"):
+            preview["user_id"] = params.get("user_id", 0)
+        elif tool_name == "delete_category":
+            preview["category_id"] = params.get("category_id", 0)
 
         return preview
 
@@ -162,6 +186,15 @@ class TransactionGuard:
             "update_supplier": lambda p: f"تعديل بيانات المورد #{p.get('supplier_id')}",
             "create_product": lambda p: f"إنشاء منتج جديد: {p.get('name')}",
             "update_product": lambda p: f"تعديل بيانات المنتج #{p.get('product_id')}",
+            # Admin descriptions
+            "create_category": lambda p: f"إنشاء تصنيف جديد: {p.get('name')}",
+            "delete_category": lambda p: f"حذف التصنيف #{p.get('category_id')}",
+            "create_user": lambda p: f"إنشاء مستخدم جديد: {p.get('username')} (صلاحية: {p.get('role')})",
+            "deactivate_user": lambda p: f"تعطيل حساب المستخدم #{p.get('user_id')}",
+            "activate_user": lambda p: f"تفعيل حساب المستخدم #{p.get('user_id')}",
+            "reset_user_password": lambda p: f"إعادة تعيين كلمة مرور المستخدم #{p.get('user_id')}",
+            "refresh_daily_summary": lambda p: f"تحديث الملخص المالي ليوم {p.get('target_date', 'اليوم')}",
+            "refresh_summary_range": lambda p: f"تحديث الملخص المالي من {p.get('start_date')} إلى {p.get('end_date', 'اليوم')}",
         }
         fn = descriptions.get(tool_name)
         return fn(params) if fn else f"تنفيذ {tool_name}"

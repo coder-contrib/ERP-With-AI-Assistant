@@ -68,6 +68,37 @@ TOOL_CATEGORIES = {
     "create_product": "منتجات",
     "update_product": "منتجات",
     "get_product": "منتجات",
+    # Admin tools
+    "list_categories": "تصنيفات",
+    "create_category": "تصنيفات",
+    "update_category": "تصنيفات",
+    "delete_category": "تصنيفات",
+    "get_monthly_profit": "تقارير",
+    "get_cash_flow": "تقارير",
+    "get_waste_report": "تقارير",
+    "get_notifications": "إشعارات",
+    "mark_notification_read": "إشعارات",
+    "mark_all_notifications_read": "إشعارات",
+    "check_low_stock_alerts": "تنبيهات",
+    "check_credit_limit_alerts": "تنبيهات",
+    "check_overdue_supplier_alerts": "تنبيهات",
+    "scan_anomalies": "تحليلات",
+    "detect_revenue_anomaly": "تحليلات",
+    "detect_expense_anomaly": "تحليلات",
+    "get_business_insights": "تحليلات",
+    "why_profit_dropped": "تحليلات",
+    "get_top_risks": "تحليلات",
+    "get_dashboard_summary": "لوحة التحكم",
+    "refresh_daily_summary": "مهام محاسبية",
+    "refresh_summary_range": "مهام محاسبية",
+    "list_users": "إدارة مستخدمين",
+    "create_user": "إدارة مستخدمين",
+    "deactivate_user": "إدارة مستخدمين",
+    "activate_user": "إدارة مستخدمين",
+    "reset_user_password": "إدارة مستخدمين",
+    "get_ledger_entries": "قيود محاسبية",
+    "get_account_balance": "قيود محاسبية",
+    "get_trial_balance": "قيود محاسبية",
 }
 
 
@@ -119,6 +150,37 @@ def _tool_label(tool: str) -> str:
         "create_product": "إنشاء منتج",
         "update_product": "تعديل منتج",
         "get_product": "عرض تفاصيل منتج",
+        # Admin tools
+        "list_categories": "عرض التصنيفات",
+        "create_category": "إنشاء تصنيف",
+        "update_category": "تعديل تصنيف",
+        "delete_category": "حذف تصنيف",
+        "get_monthly_profit": "تقرير الأرباح الشهرية",
+        "get_cash_flow": "تقرير التدفق النقدي",
+        "get_waste_report": "تقرير الهالك",
+        "get_notifications": "عرض الإشعارات",
+        "mark_notification_read": "تحديد إشعار كمقروء",
+        "mark_all_notifications_read": "تحديد الكل كمقروء",
+        "check_low_stock_alerts": "فحص تنبيهات المخزون",
+        "check_credit_limit_alerts": "فحص تجاوز الائتمان",
+        "check_overdue_supplier_alerts": "فحص المدفوعات المتأخرة",
+        "scan_anomalies": "فحص الانحرافات",
+        "detect_revenue_anomaly": "انحراف الإيرادات",
+        "detect_expense_anomaly": "انحراف المصروفات",
+        "get_business_insights": "رؤى الأعمال",
+        "why_profit_dropped": "تحليل انخفاض الربح",
+        "get_top_risks": "أهم المخاطر",
+        "get_dashboard_summary": "ملخص لوحة التحكم",
+        "refresh_daily_summary": "تحديث الملخص اليومي",
+        "refresh_summary_range": "تحديث ملخص فترة",
+        "list_users": "عرض المستخدمين",
+        "create_user": "إنشاء مستخدم",
+        "deactivate_user": "تعطيل مستخدم",
+        "activate_user": "تفعيل مستخدم",
+        "reset_user_password": "إعادة تعيين كلمة المرور",
+        "get_ledger_entries": "عرض القيود",
+        "get_account_balance": "رصيد حساب",
+        "get_trial_balance": "ميزان المراجعة",
     }
     return labels.get(tool, tool)
 
@@ -196,7 +258,24 @@ def _describe_execution(tool: str, tool_input: dict, result_summary: str) -> str
         return f"نقل {tool_input.get('quantity', 0)} وحدة بين المخازن"
     elif tool == "confirm_transaction":
         return "تم تأكيد عملية معلقة"
-    elif tool.startswith("get_") or tool.startswith("list_"):
+    # Admin tools
+    elif tool == "create_category":
+        return f"إنشاء تصنيف: {tool_input.get('name', '')}"
+    elif tool == "delete_category":
+        return f"حذف التصنيف #{tool_input.get('category_id', '')}"
+    elif tool == "create_user":
+        return f"إنشاء مستخدم: {tool_input.get('username', '')} ({tool_input.get('role', '')})"
+    elif tool == "deactivate_user":
+        return f"تعطيل المستخدم #{tool_input.get('user_id', '')}"
+    elif tool == "activate_user":
+        return f"تفعيل المستخدم #{tool_input.get('user_id', '')}"
+    elif tool == "reset_user_password":
+        return f"إعادة تعيين كلمة مرور المستخدم #{tool_input.get('user_id', '')}"
+    elif tool == "refresh_daily_summary":
+        return f"تحديث الملخص المالي ليوم {tool_input.get('target_date', 'اليوم')}"
+    elif tool == "refresh_summary_range":
+        return f"تحديث الملخص من {tool_input.get('start_date', '')} إلى {tool_input.get('end_date', 'اليوم')}"
+    elif tool.startswith("get_") or tool.startswith("list_") or tool.startswith("scan_") or tool.startswith("detect_") or tool.startswith("check_") or tool.startswith("why_") or tool.startswith("mark_"):
         return "تم الاستعلام بنجاح"
     return "تم التنفيذ"
 
