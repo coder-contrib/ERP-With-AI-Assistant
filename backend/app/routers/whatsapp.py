@@ -126,7 +126,114 @@ def send_report_to_owner(
 def _generate_report_message(db: Session, report_type: str) -> str | None:
     today = date.today().isoformat()
 
-    if report_type == "daily_sales":
+    if report_type == "daily_operations":
+        # Sales
+        sales_row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+            FROM sales_invoices WHERE DATE(created_at) = :today
+        """), {"today": today}).fetchone()
+        sales_count, sales_total, sales_paid = sales_row if sales_row else (0, 0, 0)
+
+        # Sales by type
+        cash_sales = db.execute(text("""
+            SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
+            WHERE DATE(created_at) = :today AND invoice_type = 'cash'
+        """), {"today": today}).scalar() or 0
+        credit_sales = db.execute(text("""
+            SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
+            WHERE DATE(created_at) = :today AND invoice_type = 'credit'
+        """), {"today": today}).scalar() or 0
+
+        # Purchases
+        purchases_row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+            FROM purchase_invoices WHERE DATE(created_at) = :today
+        """), {"today": today}).fetchone()
+        purch_count, purch_total, purch_paid = purchases_row if purchases_row else (0, 0, 0)
+
+        # Expenses
+        expenses_row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(amount), 0)
+            FROM expenses WHERE DATE(expense_date) = :today
+        """), {"today": today}).fetchone()
+        exp_count, exp_total = expenses_row if expenses_row else (0, 0)
+
+        # Returns (sales returns/cancelled)
+        returns_row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(total_amount), 0)
+            FROM sales_invoices WHERE DATE(created_at) = :today AND status = 'cancelled'
+        """), {"today": today}).fetchone()
+        ret_count, ret_total = returns_row if returns_row else (0, 0)
+
+        # Payments received today (from older invoices)
+        payments_received = db.execute(text("""
+            SELECT COALESCE(SUM(amount), 0)
+            FROM payments WHERE DATE(created_at) = :today AND type = 'incoming'
+        """), {"today": today}).scalar() or 0
+
+        # Payments made today (to suppliers)
+        payments_made = db.execute(text("""
+            SELECT COALESCE(SUM(amount), 0)
+            FROM payments WHERE DATE(created_at) = :today AND type = 'outgoing'
+        """), {"today": today}).scalar() or 0
+
+        # New customers today
+        new_customers = db.execute(text("""
+            SELECT COUNT(id) FROM customers WHERE DATE(created_at) = :today
+        """), {"today": today}).scalar() or 0
+
+        # Items sold today
+        items_sold = db.execute(text("""
+            SELECT COALESCE(SUM(si.quantity), 0)
+            FROM sale_items si
+            JOIN sales_invoices inv ON inv.id = si.invoice_id
+            WHERE DATE(inv.created_at) = :today
+        """), {"today": today}).scalar() or 0
+
+        # Net cash position
+        total_in = float(sales_paid) + float(payments_received)
+        total_out = float(purch_paid) + float(exp_total) + float(payments_made)
+        net_cash = total_in - total_out
+
+        return (
+            f"\U0001f4cb ملخص العمليات اليومية الشامل\n"
+            f"\U0001f4c5 {today}\n"
+            f"═══════════════════\n\n"
+            f"\U0001f4b0 المبيعات\n"
+            f"───────────────\n"
+            f"عدد الفواتير: {sales_count}\n"
+            f"إجمالي المبيعات: {float(sales_total):,.0f} جنيه\n"
+            f"  • نقدي: {float(cash_sales):,.0f} جنيه\n"
+            f"  • آجل: {float(credit_sales):,.0f} جنيه\n"
+            f"المحصل: {float(sales_paid):,.0f} جنيه\n"
+            f"قطع مباعة: {int(items_sold)}\n\n"
+            f"\U0001f6d2 المشتريات\n"
+            f"───────────────\n"
+            f"عدد الفواتير: {purch_count}\n"
+            f"إجمالي المشتريات: {float(purch_total):,.0f} جنيه\n"
+            f"المدفوع للموردين: {float(purch_paid):,.0f} جنيه\n\n"
+            f"\U0001f4c9 المصروفات\n"
+            f"───────────────\n"
+            f"عدد المصروفات: {exp_count}\n"
+            f"إجمالي المصروفات: {float(exp_total):,.0f} جنيه\n\n"
+            f"\U0001f504 المرتجعات\n"
+            f"───────────────\n"
+            f"عدد المرتجعات: {ret_count}\n"
+            f"قيمة المرتجعات: {float(ret_total):,.0f} جنيه\n\n"
+            f"\U0001f4b3 التحصيلات والمدفوعات\n"
+            f"───────────────\n"
+            f"تحصيلات واردة: {float(payments_received):,.0f} جنيه\n"
+            f"مدفوعات صادرة: {float(payments_made):,.0f} جنيه\n\n"
+            f"\U0001f465 العملاء الجدد: {new_customers}\n\n"
+            f"═══════════════════\n"
+            f"\U0001f4b5 الخزينة اليوم\n"
+            f"───────────────\n"
+            f"إجمالي الداخل: {total_in:,.0f} جنيه\n"
+            f"إجمالي الخارج: {total_out:,.0f} جنيه\n"
+            f"{'✅' if net_cash >= 0 else '⚠️'} صافي اليوم: {net_cash:,.0f} جنيه"
+        )
+
+    elif report_type == "daily_sales":
         row = db.execute(text("""
             SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
             FROM sales_invoices WHERE DATE(created_at) = :today
