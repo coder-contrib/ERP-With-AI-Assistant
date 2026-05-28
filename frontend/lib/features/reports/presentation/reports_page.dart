@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/kpi_card.dart';
-import '../../../core/utils/print_helper.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import 'reports_provider.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
@@ -18,7 +17,12 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        ref.read(reportsTabProvider.notifier).state = _tabController.index;
+      }
+    });
   }
 
   @override
@@ -27,69 +31,35 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     super.dispose();
   }
 
-  void _refresh() {
-    ref.invalidate(reportsDailySalesProvider);
-    ref.invalidate(reportsMonthlyProfitProvider);
-    ref.invalidate(reportsTopProductsProvider);
-    ref.invalidate(reportsInventoryProvider);
-    ref.invalidate(reportsCustomerBalancesProvider);
-    ref.invalidate(reportsSupplierBalancesProvider);
-    ref.invalidate(reportsCashFlowProvider);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-            child: Row(
-              children: [
-                const Icon(Icons.bar_chart_rounded, color: AppColors.primary, size: 28),
-                const SizedBox(width: 12),
-                const Text('Reports', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
-                const Spacer(),
-                IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24),
-            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+            color: isDark ? AppColors.darkSurface : Colors.white,
             child: TabBar(
               controller: _tabController,
-              isScrollable: false,
-              indicator: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
-              labelColor: Colors.white,
-              unselectedLabelColor: AppColors.primary,
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelPadding: EdgeInsets.zero,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 3,
               tabs: const [
-                Tab(text: 'Daily Sales', icon: Icon(Icons.receipt_long, size: 16)),
-                Tab(text: 'Profit', icon: Icon(Icons.trending_up, size: 16)),
-                Tab(text: 'Top Products', icon: Icon(Icons.star, size: 16)),
-                Tab(text: 'Inventory', icon: Icon(Icons.warehouse, size: 16)),
-                Tab(text: 'Customers', icon: Icon(Icons.people, size: 16)),
-                Tab(text: 'Suppliers', icon: Icon(Icons.local_shipping, size: 16)),
-                Tab(text: 'Cash Flow', icon: Icon(Icons.account_balance_wallet, size: 16)),
+                Tab(icon: Icon(Icons.trending_up, size: 20), text: 'Operational'),
+                Tab(icon: Icon(Icons.account_balance, size: 20), text: 'Financial'),
+                Tab(icon: Icon(Icons.psychology, size: 20), text: 'AI Insights'),
               ],
             ),
           ),
-          const SizedBox(height: 16),
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: const [
-                _DailySalesTab(),
-                _MonthlyProfitTab(),
-                _TopProductsTab(),
-                _InventoryTab(),
-                _CustomerBalancesTab(),
-                _SupplierBalancesTab(),
-                _CashFlowTab(),
+                _OperationalTab(),
+                _FinancialTab(),
+                _AiInsightsTab(),
               ],
             ),
           ),
@@ -99,58 +69,190 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
   }
 }
 
-// ─── Daily Sales Tab ─────────────────────────────────────────────────────────
-class _DailySalesTab extends ConsumerWidget {
-  const _DailySalesTab();
+// ============================================================
+// TAB 1: OPERATIONAL REPORTS
+// ============================================================
 
-  void _print(Map<String, dynamic> salesData) {
-    final days = (salesData['data'] as List?) ?? [];
-    final tableHtml = buildTableHtml(
-      sectionTitle: 'Daily Sales (Last 30 Days)',
-      headers: ['Date', 'Invoices', 'Total Sales', 'Cash Collected', 'Credit Sales'],
-      rows: days.map<List<String>>((d) => [
-        d['date'] ?? '', '${d['invoice_count']}',
-        '${_fmtAmount(d['total_sales'])} IQD', '${_fmtAmount(d['cash_collected'])} IQD', '${_fmtAmount(d['credit_sales'])} IQD',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Daily Sales Report', tableHtml: tableHtml);
-  }
+class _OperationalTab extends ConsumerWidget {
+  const _OperationalTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final salesAsync = ref.watch(reportsDailySalesProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _reportHeader('Daily Sales Report', () {
-            final sales = salesAsync.valueOrNull ?? {};
-            _print(sales);
-          }),
-          const SizedBox(height: 16),
-          salesAsync.when(
-            data: (data) {
-              final days = (data['data'] as List?) ?? [];
-              if (days.isEmpty) return const Text('No sales data available');
-              return _buildFullWidthTable(isDark, columns: const [
-                DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Invoices', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Total Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Cash Collected', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Credit Sales', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-              ], rows: days.map<DataRow>((d) => DataRow(cells: [
-                DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
-                DataCell(Text('${d['invoice_count']}', style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(d['total_sales']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                DataCell(Text(_fmtAmount(d['cash_collected']), style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(d['credit_sales']), style: const TextStyle(fontSize: 13))),
-              ])).toList());
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
+          _buildSectionHeader(context, 'Sales Reports', Icons.point_of_sale),
+          const SizedBox(height: 12),
+          _DailySalesCard(),
+          const SizedBox(height: 12),
+          _SalesByPeriodCard(),
+          const SizedBox(height: 12),
+          _TopProductsCard(),
+          const SizedBox(height: 12),
+          _ProductPerformanceCard(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, 'Inventory Reports', Icons.inventory_2),
+          const SizedBox(height: 12),
+          _InventoryValuationCard(),
+          const SizedBox(height: 12),
+          _LowStockCard(),
+          const SizedBox(height: 12),
+          _StockMovementCard(),
+          const SizedBox(height: 12),
+          _DeadStockCard(),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// TAB 2: FINANCIAL REPORTS
+// ============================================================
+
+class _FinancialTab extends ConsumerWidget {
+  const _FinancialTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(context, 'Profit & Loss', Icons.trending_up),
+          const SizedBox(height: 12),
+          _ProfitLossCard(),
+          const SizedBox(height: 12),
+          _MonthlyProfitCard(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, 'Cash & Payments', Icons.payments),
+          const SizedBox(height: 12),
+          _CashFlowCard(),
+          const SizedBox(height: 12),
+          _CustomerBalancesCard(),
+          const SizedBox(height: 12),
+          _SupplierBalancesCard(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, 'Expenses', Icons.receipt_long),
+          const SizedBox(height: 12),
+          _ExpenseByCategoryCard(),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// TAB 3: AI INSIGHTS REPORTS
+// ============================================================
+
+class _AiInsightsTab extends ConsumerWidget {
+  const _AiInsightsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(context, 'Customer Intelligence', Icons.people),
+          const SizedBox(height: 12),
+          _CustomerSegmentationCard(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, 'Risk & Anomaly Detection', Icons.warning_amber),
+          const SizedBox(height: 12),
+          _RiskReportCard(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(context, 'AI Summary', Icons.auto_awesome),
+          const SizedBox(height: 12),
+          _AiSummaryCard(),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// SHARED HELPERS
+// ============================================================
+
+Widget _buildSectionHeader(BuildContext context, String title, IconData icon) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return Row(
+    children: [
+      Icon(icon, size: 22, color: AppColors.primary),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: isDark ? AppColors.darkText : AppColors.text,
+        ),
+      ),
+    ],
+  );
+}
+
+class _ReportCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final Color? accentColor;
+
+  const _ReportCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = accentColor ?? AppColors.primary;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.05),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: child,
           ),
         ],
       ),
@@ -158,405 +260,510 @@ class _DailySalesTab extends ConsumerWidget {
   }
 }
 
-// ─── Monthly Profit Tab ──────────────────────────────────────────────────────
-class _MonthlyProfitTab extends ConsumerWidget {
-  const _MonthlyProfitTab();
-
-  void _print(Map<String, dynamic> profitData) {
-    final months = (profitData['data'] as List?) ?? [];
-    final tableHtml = buildTableHtml(
-      sectionTitle: 'Monthly Profit & Loss',
-      headers: ['Month', 'Revenue', 'COGS', 'Gross Profit', 'Expenses', 'Net Profit', 'Margin'],
-      rows: months.map<List<String>>((m) => [
-        m['month'] ?? '', '${_fmtAmount(m['revenue'])} IQD', '${_fmtAmount(m['cogs'])} IQD',
-        '${_fmtAmount(m['gross_profit'])} IQD', '${_fmtAmount(m['expenses'])} IQD',
-        '${_fmtAmount(m['net_profit'])} IQD', '${m['gross_margin']}%',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Monthly Profit Report', tableHtml: tableHtml);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profitAsync = ref.watch(reportsMonthlyProfitProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Monthly Profit & Loss', () {
-            final profit = profitAsync.valueOrNull ?? {};
-            _print(profit);
-          }),
-          const SizedBox(height: 16),
-          profitAsync.when(
-            data: (data) {
-              final months = (data['data'] as List?) ?? [];
-              if (months.isEmpty) return const Text('No profit data');
-              return _buildFullWidthTable(isDark, columns: const [
-                DataColumn(label: Text('Month', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('COGS', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Gross Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Expenses', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Net Profit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Margin', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-              ], rows: months.map<DataRow>((m) => DataRow(cells: [
-                DataCell(Text(m['month'] ?? '', style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(m['revenue']), style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(m['cogs']), style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(m['gross_profit']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success))),
-                DataCell(Text(_fmtAmount(m['expenses']), style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(m['net_profit']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(m['net_profit'])))),
-                DataCell(Text('${m['gross_margin']}%', style: const TextStyle(fontSize: 13))),
-              ])).toList());
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-        ],
+Widget _buildKpi(String label, String value, {Color? color}) {
+  return Column(
+    children: [
+      Text(
+        value,
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: color ?? AppColors.primary),
       ),
-    );
-  }
+      const SizedBox(height: 4),
+      Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+    ],
+  );
 }
 
-// ─── Top Products Tab ────────────────────────────────────────────────────────
-class _TopProductsTab extends ConsumerWidget {
-  const _TopProductsTab();
-
-  void _print(Map<String, dynamic> topData) {
-    final products = (topData['data'] as List?) ?? [];
-    final tableHtml = buildTableHtml(
-      sectionTitle: 'Top Selling Products',
-      headers: ['#', 'Product', 'Qty Sold', 'Revenue'],
-      rows: products.asMap().entries.map<List<String>>((e) => [
-        '${e.key + 1}', e.value['product_name'] ?? '',
-        '${e.value['total_quantity']}', '${_fmtAmount(e.value['total_revenue'])} IQD',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Top Products Report', tableHtml: tableHtml);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final topAsync = ref.watch(reportsTopProductsProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Top Selling Products', () {
-            final top = topAsync.valueOrNull ?? {};
-            _print(top);
-          }),
-          const SizedBox(height: 16),
-          topAsync.when(
-            data: (data) {
-              final products = (data['data'] as List?) ?? [];
-              if (products.isEmpty) return const Text('No product data');
-              return _buildFullWidthTable(isDark, columns: const [
-                DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
-                DataColumn(label: Text('Qty Sold', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-              ], rows: products.asMap().entries.map<DataRow>((e) => DataRow(cells: [
-                DataCell(Text('${e.key + 1}', style: const TextStyle(fontSize: 13))),
-                DataCell(Text(e.value['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                DataCell(Text('${e.value['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                DataCell(Text(_fmtAmount(e.value['total_revenue']), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-              ])).toList());
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-        ],
-      ),
-    );
-  }
+Widget _buildError(Object error) {
+  return Padding(
+    padding: const EdgeInsets.all(12),
+    child: Text('Error: $error', style: const TextStyle(color: AppColors.error, fontSize: 12)),
+  );
 }
 
-// ─── Inventory Tab ───────────────────────────────────────────────────────────
-class _InventoryTab extends ConsumerWidget {
-  const _InventoryTab();
+Widget _buildLoading() {
+  return const Padding(
+    padding: EdgeInsets.all(16),
+    child: Center(child: SkeletonLoader(height: 60, width: double.infinity)),
+  );
+}
 
-  void _print(Map<String, dynamic> data) {
-    final valuation = data['data'] as Map<String, dynamic>? ?? {};
-    final warehouses = (valuation['warehouses'] as List?) ?? [];
+// ============================================================
+// OPERATIONAL REPORT CARDS
+// ============================================================
 
-    var tableHtml = '<p style="font-size:16px;font-weight:bold;margin-bottom:15px;">Total Inventory Value: ${_fmtAmount(valuation['grand_total_value'])} IQD</p>';
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Inventory Valuation by Warehouse',
-      headers: ['Warehouse', 'Products', 'Total Qty', 'Value (IQD)'],
-      rows: warehouses.map<List<String>>((w) => [
-        w['warehouse_name'] ?? '', '${w['product_count']}',
-        '${w['total_quantity']}', '${_fmtAmount(w['total_value'])} IQD',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Inventory Report', tableHtml: tableHtml);
-  }
-
+class _DailySalesCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inventoryAsync = ref.watch(reportsInventoryProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Inventory Valuation', () {
-            final data = inventoryAsync.valueOrNull ?? {};
-            _print(data);
-          }),
-          const SizedBox(height: 16),
-          inventoryAsync.when(
-            data: (data) {
-              final valuation = data['data'] as Map<String, dynamic>? ?? {};
-              final warehouses = (valuation['warehouses'] as List?) ?? [];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    final data = ref.watch(reportsDailySalesProvider);
+    return _ReportCard(
+      title: 'Daily Sales',
+      icon: Icons.today,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final items = (report['data'] as List?) ?? [];
+          if (items.isEmpty) return const Text('No sales data available');
+          final totalSales = items.fold<double>(0, (sum, i) => sum + double.parse(i['total_sales'] ?? '0'));
+          final totalInvoices = items.fold<int>(0, (sum, i) => sum + (i['invoice_count'] as int? ?? 0));
+          final avgInvoice = totalInvoices > 0 ? totalSales / totalInvoices : 0;
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.inventory, color: AppColors.primary),
-                      const SizedBox(width: 12),
-                      Text('Total Inventory Value: ${_fmtAmount(valuation['grand_total_value'])} IQD',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                    ]),
+                  _buildKpi('Total Sales', '${totalSales.toStringAsFixed(0)} IQD'),
+                  _buildKpi('Invoices', '$totalInvoices'),
+                  _buildKpi('Avg Invoice', '${avgInvoice.toStringAsFixed(0)} IQD'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (items.length > 1)
+                SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: items.take(14).map((i) {
+                      final sales = double.parse(i['total_sales'] ?? '0');
+                      final maxSales = items.fold<double>(0, (m, x) {
+                        final v = double.parse(x['total_sales'] ?? '0');
+                        return v > m ? v : m;
+                      });
+                      final height = maxSales > 0 ? (sales / maxSales * 36) : 0.0;
+                      return Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            height: height,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 16),
-                  _buildFullWidthTable(isDark, columns: const [
-                    DataColumn(label: Text('Warehouse', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Products', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Total Qty', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Value', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  ], rows: warehouses.map<DataRow>((w) => DataRow(cells: [
-                    DataCell(Text(w['warehouse_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text('${w['product_count']}', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text('${w['total_quantity']}', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text('${_fmtAmount(w['total_value'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                  ])).toList()),
-                ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-        ],
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-// ─── Customer Balances Tab ───────────────────────────────────────────────────
-class _CustomerBalancesTab extends ConsumerWidget {
-  const _CustomerBalancesTab();
-
-  void _print(Map<String, dynamic> custData) {
-    final customers = (custData['data'] as List?) ?? [];
-    var tableHtml = '<p style="font-size:14px;margin-bottom:10px;"><strong>Total Receivables: ${_fmtAmount(custData['total_receivable'])} IQD</strong></p>';
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Customer Receivables',
-      headers: ['Customer', 'Balance (IQD)', 'Credit Limit (IQD)', 'Status'],
-      rows: customers.map<List<String>>((c) => [
-        c['customer_name'] ?? '', '${_fmtAmount(c['current_balance'])} IQD',
-        '${_fmtAmount(c['credit_limit'])} IQD', c['over_limit'] == true ? 'OVER LIMIT' : 'OK',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Customer Balances Report', tableHtml: tableHtml);
-  }
-
+class _SalesByPeriodCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customersAsync = ref.watch(reportsCustomerBalancesProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Customer Balances', () {
-            final cust = customersAsync.valueOrNull ?? {};
-            _print(cust);
-          }),
-          const SizedBox(height: 16),
-          customersAsync.when(
-            data: (data) {
-              final customers = (data['data'] as List?) ?? [];
-              if (customers.isEmpty) return const Text('No receivables');
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    final data = ref.watch(reportsSalesByPeriodProvider('month'));
+    return _ReportCard(
+      title: 'Sales by Month (Growth %)',
+      icon: Icons.calendar_month,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final periods = (reportData['periods'] as List?) ?? [];
+          if (periods.isEmpty) return const Text('No data');
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _statBadge('Total Receivables', data['total_receivable'], AppColors.warning),
-                  const SizedBox(height: 16),
-                  _buildFullWidthTable(isDark, columns: const [
-                    DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Credit Limit', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                  ], rows: customers.map<DataRow>((c) => DataRow(cells: [
-                    DataCell(Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text('${_fmtAmount(c['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                    DataCell(Text('${_fmtAmount(c['credit_limit'])} IQD', style: const TextStyle(fontSize: 13))),
-                    DataCell(c['over_limit'] == true
-                      ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                          child: const Text('Over Limit', style: TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)))
-                      : Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                          child: const Text('OK', style: TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600)))),
-                  ])).toList()),
+                  _buildKpi('Total', '${double.parse(reportData['total_sales'] ?? '0').toStringAsFixed(0)} IQD'),
+                  _buildKpi('Invoices', '${reportData['total_invoices'] ?? 0}'),
                 ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-        ],
+              ),
+              const SizedBox(height: 12),
+              ...periods.take(6).map((p) {
+                final growth = double.parse(p['growth_pct'] ?? '0');
+                final isPositive = growth >= 0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 80, child: Text(p['period_start'] ?? '', style: const TextStyle(fontSize: 12))),
+                      Expanded(
+                        child: Text(
+                          '${double.parse(p['total_sales'] ?? '0').toStringAsFixed(0)} IQD',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (isPositive ? AppColors.success : AppColors.error).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${isPositive ? "+" : ""}${growth.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isPositive ? AppColors.success : AppColors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-// ─── Supplier Balances Tab ───────────────────────────────────────────────────
-class _SupplierBalancesTab extends ConsumerWidget {
-  const _SupplierBalancesTab();
-
-  void _print(Map<String, dynamic> suppData) {
-    final suppliers = (suppData['data'] as List?) ?? [];
-    var tableHtml = '<p style="font-size:14px;margin-bottom:10px;"><strong>Total Payables: ${_fmtAmount(suppData['total_payable'])} IQD</strong></p>';
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Supplier Payables',
-      headers: ['Supplier', 'Balance (IQD)', 'Payment Terms (days)'],
-      rows: suppliers.map<List<String>>((s) => [
-        s['supplier_name'] ?? '', '${_fmtAmount(s['current_balance'])} IQD', '${s['payment_terms']}',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Supplier Balances Report', tableHtml: tableHtml);
-  }
-
+class _TopProductsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final suppliersAsync = ref.watch(reportsSupplierBalancesProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Supplier Balances', () {
-            final supp = suppliersAsync.valueOrNull ?? {};
-            _print(supp);
-          }),
-          const SizedBox(height: 16),
-          suppliersAsync.when(
-            data: (data) {
-              final suppliers = (data['data'] as List?) ?? [];
-              if (suppliers.isEmpty) return const Text('No payables');
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _statBadge('Total Payables', data['total_payable'], AppColors.error),
-                  const SizedBox(height: 16),
-                  _buildFullWidthTable(isDark, columns: const [
-                    DataColumn(label: Text('Supplier', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Balance', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Terms (days)', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  ], rows: suppliers.map<DataRow>((s) => DataRow(cells: [
-                    DataCell(Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text('${_fmtAmount(s['current_balance'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                    DataCell(Text('${s['payment_terms']}', style: const TextStyle(fontSize: 13))),
-                  ])).toList()),
-                ],
+    final data = ref.watch(reportsTopProductsProvider);
+    return _ReportCard(
+      title: 'Top Selling Products',
+      icon: Icons.star,
+      accentColor: AppColors.warning,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final items = (report['data'] as List?) ?? [];
+          if (items.isEmpty) return const Text('No data');
+          return Column(
+            children: items.take(5).map((p) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(p['product_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                    Text('${double.parse(p['total_revenue'] ?? '0').toStringAsFixed(0)} IQD',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
               );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
-          ),
-        ],
+            }).toList(),
+          );
+        },
       ),
     );
   }
 }
 
-// ─── Cash Flow Tab ───────────────────────────────────────────────────────────
-class _CashFlowTab extends ConsumerWidget {
-  const _CashFlowTab();
-
-  void _print(Map<String, dynamic> cashData) {
-    final flowData = cashData['data'] as Map<String, dynamic>? ?? {};
-    final days = (flowData['days'] as List?) ?? [];
-
-    var tableHtml = '<p style="font-size:14px;margin:10px 0;"><strong>Summary:</strong> Total In: ${_fmtAmount(flowData['total_in'])} IQD | Total Out: ${_fmtAmount(flowData['total_out'])} IQD | Net: ${_fmtAmount(flowData['net_flow'])} IQD</p>';
-    tableHtml += buildTableHtml(
-      sectionTitle: 'Cash Flow (Last 30 Days)',
-      headers: ['Date', 'Cash In', 'Cash Out', 'Net'],
-      rows: days.map<List<String>>((d) => [
-        d['date'] ?? '', '${_fmtAmount(d['cash_in'])} IQD',
-        '${_fmtAmount(d['cash_out'])} IQD', '${_fmtAmount(d['net'])} IQD',
-      ]).toList(),
-    );
-    printReportHtml(title: 'Cash Flow Report', tableHtml: tableHtml);
-  }
-
+class _ProductPerformanceCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cashFlowAsync = ref.watch(reportsCashFlowProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _reportHeader('Cash Flow Report', () {
-            final cash = cashFlowAsync.valueOrNull ?? {};
-            _print(cash);
-          }),
-          const SizedBox(height: 16),
-          cashFlowAsync.when(
-            data: (data) {
-              final flowData = data['data'] as Map<String, dynamic>? ?? {};
-              final days = (flowData['days'] as List?) ?? [];
-              if (days.isEmpty) return const Text('No cash flow data');
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    final data = ref.watch(reportsProductPerformanceProvider);
+    return _ReportCard(
+      title: 'Product Performance (Profitability)',
+      icon: Icons.analytics,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final products = (reportData['products'] as List?) ?? [];
+          if (products.isEmpty) return const Text('No data');
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Row(children: [
-                    _statBadge('Total In', flowData['total_in'], AppColors.success),
+                  _buildKpi('Revenue', '${double.parse(reportData['total_revenue'] ?? '0').toStringAsFixed(0)} IQD'),
+                  _buildKpi('Profit', '${double.parse(reportData['total_profit'] ?? '0').toStringAsFixed(0)} IQD', color: AppColors.success),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...products.take(5).map((p) {
+                final margin = double.parse(p['margin_pct'] ?? '0');
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(p['product_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                      SizedBox(
+                        width: 70,
+                        child: Text('${double.parse(p['profit'] ?? '0').toStringAsFixed(0)} IQD',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: (margin >= 20 ? AppColors.success : AppColors.warning).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${margin.toStringAsFixed(1)}%',
+                          style: TextStyle(fontSize: 10, color: margin >= 20 ? AppColors.success : AppColors.warning),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _InventoryValuationCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsInventoryProvider);
+    return _ReportCard(
+      title: 'Inventory Valuation',
+      icon: Icons.warehouse,
+      accentColor: AppColors.info,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final warehouses = (reportData['warehouses'] as List?) ?? [];
+          return Column(
+            children: [
+              _buildKpi('Total Capital', '${double.parse(reportData['grand_total_value'] ?? '0').toStringAsFixed(0)} IQD', color: AppColors.info),
+              const SizedBox(height: 12),
+              ...warehouses.map((w) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warehouse_outlined, size: 14, color: AppColors.info),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(w['warehouse_name'] ?? '', style: const TextStyle(fontSize: 13))),
+                    Text('${w['product_count']} items', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                     const SizedBox(width: 12),
-                    _statBadge('Total Out', flowData['total_out'], AppColors.error),
-                    const SizedBox(width: 12),
-                    _statBadge('Net Flow', flowData['net_flow'], AppColors.info),
-                  ]),
-                  const SizedBox(height: 16),
-                  _buildFullWidthTable(isDark, columns: const [
-                    DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                    DataColumn(label: Text('Cash In', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Cash Out', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                    DataColumn(label: Text('Net', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
-                  ], rows: days.map<DataRow>((d) => DataRow(cells: [
-                    DataCell(Text(d['date'] ?? '', style: const TextStyle(fontSize: 13))),
-                    DataCell(Text(_fmtAmount(d['cash_in']), style: const TextStyle(fontSize: 13, color: AppColors.success))),
-                    DataCell(Text(_fmtAmount(d['cash_out']), style: const TextStyle(fontSize: 13, color: AppColors.error))),
-                    DataCell(Text(_fmtAmount(d['net']), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _profitColor(d['net'])))),
-                  ])).toList()),
+                    Text('${double.parse(w['total_value'] ?? '0').toStringAsFixed(0)} IQD',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              )),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LowStockCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsLowStockProvider);
+    return _ReportCard(
+      title: 'Low Stock Alert',
+      icon: Icons.warning_amber,
+      accentColor: AppColors.error,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final lowStock = (reportData['low_stock'] as List?) ?? [];
+          final outOfStock = (reportData['out_of_stock'] as List?) ?? [];
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildKpi('Low Stock', '${reportData['low_stock_count'] ?? 0}', color: AppColors.warning),
+                  _buildKpi('Out of Stock', '${reportData['out_of_stock_count'] ?? 0}', color: AppColors.error),
                 ],
+              ),
+              if (lowStock.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...lowStock.take(5).map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(item['product_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                      Text('Qty: ${item['current_quantity']}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      Text('Reorder: ${double.parse(item['reorder_suggestion'] ?? '0').toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                    ],
+                  ),
+                )),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StockMovementCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsStockMovementProvider);
+    return _ReportCard(
+      title: 'Stock Movement (30 days)',
+      icon: Icons.swap_vert,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final products = (reportData['products'] as List?) ?? [];
+          if (products.isEmpty) return const Text('No movements');
+          return Column(
+            children: products.take(8).map((p) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(p['product_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1), borderRadius: BorderRadius.circular(3)),
+                      child: Text('IN: ${double.parse(p['total_in'] ?? '0').toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.success)),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(3)),
+                      child: Text('OUT: ${double.parse(p['total_out'] ?? '0').toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.error)),
+                    ),
+                  ],
+                ),
               );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Error: $e'),
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DeadStockCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsDeadStockProvider);
+    return _ReportCard(
+      title: 'Dead Stock (No Movement 30+ days)',
+      icon: Icons.block,
+      accentColor: AppColors.error,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final reportData = report['data'] as Map<String, dynamic>? ?? {};
+          final items = (reportData['items'] as List?) ?? [];
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildKpi('Dead Items', '${reportData['dead_stock_count'] ?? 0}', color: AppColors.error),
+                  _buildKpi('Capital Locked', '${double.parse(reportData['total_capital_locked'] ?? '0').toStringAsFixed(0)} IQD', color: AppColors.error),
+                ],
+              ),
+              if (items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...items.take(5).map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(item['product_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                      Text('${double.parse(item['total_value'] ?? '0').toStringAsFixed(0)} IQD',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      Text('Last: ${_formatDate(item['last_movement'] ?? '')}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                    ],
+                  ),
+                )),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================
+// FINANCIAL REPORT CARDS
+// ============================================================
+
+class _ProfitLossCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsProfitLossProvider);
+    return _ReportCard(
+      title: 'Profit & Loss (Last 30 Days)',
+      icon: Icons.trending_up,
+      accentColor: AppColors.success,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final revenue = double.parse(d['revenue'] ?? '0');
+          final cogs = double.parse(d['cogs'] ?? '0');
+          final grossProfit = double.parse(d['gross_profit'] ?? '0');
+          final expenses = double.parse(d['total_expenses'] ?? '0');
+          final netProfit = double.parse(d['net_profit'] ?? '0');
+          final netMargin = double.parse(d['net_margin_pct'] ?? '0');
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildKpi('Revenue', '${revenue.toStringAsFixed(0)} IQD'),
+                  _buildKpi('Net Profit', '${netProfit.toStringAsFixed(0)} IQD', color: netProfit >= 0 ? AppColors.success : AppColors.error),
+                  _buildKpi('Margin', '${netMargin.toStringAsFixed(1)}%', color: netProfit >= 0 ? AppColors.success : AppColors.error),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _PnlRow(label: 'Revenue', value: revenue, isTotal: true),
+              _PnlRow(label: 'Cost of Goods', value: -cogs),
+              _PnlRow(label: 'Gross Profit', value: grossProfit, isSubtotal: true),
+              _PnlRow(label: 'Expenses', value: -expenses),
+              const Divider(height: 8),
+              _PnlRow(label: 'Net Profit', value: netProfit, isTotal: true),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PnlRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final bool isTotal;
+  final bool isSubtotal;
+
+  const _PnlRow({required this.label, required this.value, this.isTotal = false, this.isSubtotal = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(
+            fontSize: isTotal ? 13 : 12,
+            fontWeight: isTotal || isSubtotal ? FontWeight.w600 : FontWeight.normal,
+          ))),
+          Text(
+            '${value >= 0 ? '' : '-'}${value.abs().toStringAsFixed(0)} IQD',
+            style: TextStyle(
+              fontSize: isTotal ? 13 : 12,
+              fontWeight: isTotal || isSubtotal ? FontWeight.w700 : FontWeight.normal,
+              color: value >= 0 ? AppColors.success : AppColors.error,
+            ),
           ),
         ],
       ),
@@ -564,81 +771,490 @@ class _CashFlowTab extends ConsumerWidget {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-Widget _reportHeader(String title, VoidCallback onPrint) {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: AppColors.primary.withOpacity(0.03),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: AppColors.primary.withOpacity(0.1)),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.description_outlined, color: AppColors.primary, size: 20),
-        const SizedBox(width: 10),
-        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-        const Spacer(),
-        ElevatedButton.icon(
-          onPressed: onPrint,
-          icon: const Icon(Icons.print, size: 16),
-          label: const Text('Print Report'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-Widget _buildFullWidthTable(bool isDark, {required List<DataColumn> columns, required List<DataRow> rows}) {
-  return Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      color: isDark ? AppColors.darkSurface : AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: double.infinity,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(isDark ? AppColors.darkBackground : AppColors.background),
-          columnSpacing: 24,
-          horizontalMargin: 16,
-          columns: columns,
-          rows: rows,
-        ),
+class _MonthlyProfitCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsMonthlyProfitProvider);
+    return _ReportCard(
+      title: 'Monthly Profit Trend',
+      icon: Icons.bar_chart,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final items = (report['data'] as List?) ?? [];
+          if (items.isEmpty) return const Text('No data');
+          return Column(
+            children: items.take(6).map((m) {
+              final netProfit = double.parse(m['net_profit'] ?? '0');
+              final margin = m['gross_margin'] ?? '0';
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(width: 70, child: Text(m['month'] ?? '', style: const TextStyle(fontSize: 12))),
+                    Expanded(
+                      child: Text('${double.parse(m['revenue'] ?? '0').toStringAsFixed(0)} IQD',
+                          style: const TextStyle(fontSize: 12)),
+                    ),
+                    Text(
+                      '${netProfit.toStringAsFixed(0)} IQD',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: netProfit >= 0 ? AppColors.success : AppColors.error,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          );
+        },
       ),
-    ),
-  );
+    );
+  }
 }
 
-Widget _statBadge(String label, dynamic value, Color color) {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-    child: Column(children: [
-      Text(label, style: TextStyle(fontSize: 11, color: color)),
-      const SizedBox(height: 2),
-      Text('${_fmtAmount(value)} IQD', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color)),
-    ]),
-  );
+class _CashFlowCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsCashFlowProvider);
+    return _ReportCard(
+      title: 'Cash Flow (30 Days)',
+      icon: Icons.account_balance_wallet,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final totalIn = double.parse(d['total_in'] ?? '0');
+          final totalOut = double.parse(d['total_out'] ?? '0');
+          final net = double.parse(d['net_flow'] ?? '0');
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildKpi('Cash In', '${totalIn.toStringAsFixed(0)} IQD', color: AppColors.success),
+              _buildKpi('Cash Out', '${totalOut.toStringAsFixed(0)} IQD', color: AppColors.error),
+              _buildKpi('Net Flow', '${net.toStringAsFixed(0)} IQD', color: net >= 0 ? AppColors.success : AppColors.error),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
-String _fmtAmount(dynamic v) {
-  if (v == null) return '0';
-  final num = double.tryParse(v.toString()) ?? 0;
-  if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(1)}M';
-  if (num >= 1000) return '${(num / 1000).toStringAsFixed(0)}K';
-  return num.toStringAsFixed(0);
+class _CustomerBalancesCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsCustomerBalancesProvider);
+    return _ReportCard(
+      title: 'Receivables (Customer Debts)',
+      icon: Icons.people,
+      accentColor: AppColors.warning,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final items = (report['data'] as List?) ?? [];
+          final total = report['total_receivable'] ?? '0';
+          return Column(
+            children: [
+              _buildKpi('Total Receivable', '${double.parse(total).toStringAsFixed(0)} IQD', color: AppColors.warning),
+              const SizedBox(height: 12),
+              ...items.take(5).map((c) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                    Text('${double.parse(c['current_balance'] ?? '0').toStringAsFixed(0)} IQD',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: c['over_limit'] == true ? AppColors.error : AppColors.warning,
+                        )),
+                  ],
+                ),
+              )),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
-Color _profitColor(dynamic v) {
-  final num = double.tryParse(v?.toString() ?? '0') ?? 0;
-  return num >= 0 ? AppColors.success : AppColors.error;
+class _SupplierBalancesCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsSupplierBalancesProvider);
+    return _ReportCard(
+      title: 'Payables (Supplier Debts)',
+      icon: Icons.local_shipping,
+      accentColor: AppColors.info,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final items = (report['data'] as List?) ?? [];
+          final total = report['total_payable'] ?? '0';
+          return Column(
+            children: [
+              _buildKpi('Total Payable', '${double.parse(total).toStringAsFixed(0)} IQD', color: AppColors.info),
+              const SizedBox(height: 12),
+              ...items.take(5).map((s) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(s['supplier_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                    Text('${double.parse(s['current_balance'] ?? '0').toStringAsFixed(0)} IQD',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              )),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ExpenseByCategoryCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsExpenseByCategoryProvider);
+    return _ReportCard(
+      title: 'Expenses by Category',
+      icon: Icons.receipt_long,
+      accentColor: AppColors.error,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final categories = (d['categories'] as List?) ?? [];
+          final grandTotal = double.parse(d['grand_total'] ?? '0');
+          return Column(
+            children: [
+              _buildKpi('Total Expenses', '${grandTotal.toStringAsFixed(0)} IQD', color: AppColors.error),
+              const SizedBox(height: 12),
+              ...categories.take(6).map((cat) {
+                final pct = double.parse(cat['percentage'] ?? '0');
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(cat['category'] ?? '', style: const TextStyle(fontSize: 12))),
+                          Text('${double.parse(cat['total_amount'] ?? '0').toStringAsFixed(0)} IQD',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 8),
+                          Text('${pct.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: pct / 100,
+                          minHeight: 4,
+                          backgroundColor: AppColors.border,
+                          valueColor: const AlwaysStoppedAnimation(AppColors.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================
+// AI INSIGHTS REPORT CARDS
+// ============================================================
+
+class _CustomerSegmentationCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(reportsCustomerSegmentationProvider);
+    return _ReportCard(
+      title: 'Customer Segmentation',
+      icon: Icons.group_work,
+      accentColor: AppColors.primary,
+      child: data.when(
+        loading: () => _buildLoading(),
+        error: (e, _) => _buildError(e),
+        data: (report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final vip = d['vip_customers'] as Map<String, dynamic>? ?? {};
+          final active = d['active_customers'] as Map<String, dynamic>? ?? {};
+          final inactive = d['inactive_customers'] as Map<String, dynamic>? ?? {};
+          final highDebt = d['high_debt_customers'] as Map<String, dynamic>? ?? {};
+
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildKpi('Total', '${d['total_customers'] ?? 0}'),
+                  _buildKpi('VIP', '${vip['count'] ?? 0}', color: AppColors.warning),
+                  _buildKpi('Active', '${active['count'] ?? 0}', color: AppColors.success),
+                  _buildKpi('Inactive', '${inactive['count'] ?? 0}', color: AppColors.textSecondary),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if ((highDebt['count'] ?? 0) > 0) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.warning, size: 14, color: AppColors.error),
+                    const SizedBox(width: 6),
+                    Text('${highDebt['count']} high-debt customers',
+                        style: const TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...(highDebt['customers'] as List? ?? []).take(3).map((c) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 20),
+                      Expanded(child: Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                      Text('${double.parse(c['current_balance'] ?? '0').toStringAsFixed(0)} IQD',
+                          style: const TextStyle(fontSize: 11, color: AppColors.error, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                )),
+              ],
+              const SizedBox(height: 12),
+              if ((vip['customers'] as List? ?? []).isNotEmpty) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.star, size: 14, color: AppColors.warning),
+                    const SizedBox(width: 6),
+                    const Text('VIP Customers', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ...(vip['customers'] as List? ?? []).take(3).map((c) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 20),
+                      Expanded(child: Text(c['customer_name'] ?? '', style: const TextStyle(fontSize: 12))),
+                      Text('${double.parse(c['total_purchases'] ?? '0').toStringAsFixed(0)} IQD',
+                          style: const TextStyle(fontSize: 11, color: AppColors.warning, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                )),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RiskReportCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final deadStock = ref.watch(reportsDeadStockProvider);
+    final lowStock = ref.watch(reportsLowStockProvider);
+    final customerBalances = ref.watch(reportsCustomerBalancesProvider);
+
+    return _ReportCard(
+      title: 'Risk Assessment',
+      icon: Icons.shield,
+      accentColor: AppColors.error,
+      child: Builder(builder: (_) {
+        final risks = <Map<String, dynamic>>[];
+
+        deadStock.whenData((report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final count = d['dead_stock_count'] ?? 0;
+          final value = double.parse(d['total_capital_locked'] ?? '0');
+          if (count > 0) {
+            risks.add({
+              'type': 'Dead Stock',
+              'severity': value > 50000 ? 'high' : 'medium',
+              'detail': '$count products, ${value.toStringAsFixed(0)} IQD locked',
+            });
+          }
+        });
+
+        lowStock.whenData((report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final oos = d['out_of_stock_count'] ?? 0;
+          if (oos > 0) {
+            risks.add({
+              'type': 'Out of Stock',
+              'severity': oos > 5 ? 'high' : 'medium',
+              'detail': '$oos products out of stock',
+            });
+          }
+        });
+
+        customerBalances.whenData((report) {
+          final items = (report['data'] as List?) ?? [];
+          final overLimit = items.where((c) => c['over_limit'] == true).length;
+          if (overLimit > 0) {
+            risks.add({
+              'type': 'Credit Risk',
+              'severity': 'high',
+              'detail': '$overLimit customers over credit limit',
+            });
+          }
+        });
+
+        if (risks.isEmpty) {
+          return const Row(
+            children: [
+              Icon(Icons.check_circle, color: AppColors.success, size: 18),
+              SizedBox(width: 8),
+              Text('No significant risks detected', style: TextStyle(fontSize: 13, color: AppColors.success)),
+            ],
+          );
+        }
+
+        return Column(
+          children: risks.map((r) {
+            final isHigh = r['severity'] == 'high';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isHigh ? Icons.error : Icons.warning,
+                    size: 16,
+                    color: isHigh ? AppColors.error : AppColors.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(r['type'], style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isHigh ? AppColors.error : AppColors.warning,
+                        )),
+                        Text(r['detail'], style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isHigh ? 'HIGH' : 'MEDIUM',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: isHigh ? AppColors.error : AppColors.warning),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      }),
+    );
+  }
+}
+
+class _AiSummaryCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dailySales = ref.watch(reportsDailySalesProvider);
+    final profitLoss = ref.watch(reportsProfitLossProvider);
+
+    return _ReportCard(
+      title: 'AI Daily Summary',
+      icon: Icons.auto_awesome,
+      accentColor: Colors.purple,
+      child: Builder(builder: (_) {
+        String summary = '';
+
+        dailySales.whenData((report) {
+          final items = (report['data'] as List?) ?? [];
+          if (items.length >= 2) {
+            final today = double.parse(items.last['total_sales'] ?? '0');
+            final yesterday = double.parse(items[items.length - 2]['total_sales'] ?? '0');
+            final change = yesterday > 0 ? ((today - yesterday) / yesterday * 100) : 0;
+            if (change > 0) {
+              summary += 'Sales increased by ${change.toStringAsFixed(1)}% compared to yesterday. ';
+            } else if (change < 0) {
+              summary += 'Sales decreased by ${change.abs().toStringAsFixed(1)}% compared to yesterday. ';
+            }
+            summary += 'Today: ${items.last['invoice_count']} invoices totaling ${today.toStringAsFixed(0)} IQD. ';
+          }
+        });
+
+        profitLoss.whenData((report) {
+          final d = report['data'] as Map<String, dynamic>? ?? {};
+          final margin = double.parse(d['net_margin_pct'] ?? '0');
+          final netProfit = double.parse(d['net_profit'] ?? '0');
+          if (margin < 10 && netProfit > 0) {
+            summary += 'Profit margin is low (${margin.toStringAsFixed(1)}%) - consider reducing discounts or expenses.';
+          } else if (netProfit < 0) {
+            summary += 'WARNING: Operating at a loss. Review expenses and pricing urgently.';
+          } else if (margin > 20) {
+            summary += 'Healthy profit margin of ${margin.toStringAsFixed(1)}%.';
+          }
+        });
+
+        if (summary.isEmpty) {
+          summary = 'Loading insights...';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.purple.withOpacity(0.15)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.auto_awesome, size: 16, color: Colors.purple),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(summary, style: const TextStyle(fontSize: 13, height: 1.5)),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+
+String _formatDate(String dateStr) {
+  if (dateStr.isEmpty || dateStr == 'Never') return dateStr;
+  try {
+    final dt = DateTime.parse(dateStr);
+    return '${dt.day}/${dt.month}';
+  } catch (_) {
+    return dateStr;
+  }
 }
