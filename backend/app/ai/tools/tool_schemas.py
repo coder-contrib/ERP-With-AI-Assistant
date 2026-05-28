@@ -894,4 +894,37 @@ TOOL_SCHEMAS = [
             "required": ["to"],
         },
     },
+    # ═══ WORKFLOW TOOLS (Composite Operations) ═══
+    {
+        "name": "create_invoice_and_notify",
+        "description": "Creates a sales invoice AND sends it to the customer via WhatsApp in one atomic operation. Use this instead of calling create_invoice + send_whatsapp_message separately. Guarantees both actions complete together.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "integer", "description": "Customer ID (required for WhatsApp delivery)"},
+                "items": {
+                    "type": "array",
+                    "description": "Items to sell",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "integer"},
+                            "quantity": {"type": "number"},
+                            "unit_price": {"type": "number"},
+                            "unit_type": {"type": "string", "default": "meter"},
+                            "discount": {"type": "number", "default": 0},
+                        },
+                        "required": ["product_id", "quantity"],
+                    },
+                },
+                "payment_type": {"type": "string", "enum": ["cash", "credit", "mixed"], "default": "cash"},
+                "warehouse_id": {"type": "integer", "default": 1},
+                "discount": {"type": "number", "default": 0},
+                "paid_amount": {"type": "number", "description": "Amount paid now (for cash/mixed payments)"},
+                "notes": {"type": "string"},
+                "message_template": {"type": "string", "description": "Optional custom WhatsApp message template. Use {invoice_number}, {total}, {customer_name} as placeholders."},
+            },
+            "required": ["customer_id", "items"],
+        },
+    },
 ]
