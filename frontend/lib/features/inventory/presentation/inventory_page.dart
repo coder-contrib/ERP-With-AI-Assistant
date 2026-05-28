@@ -34,9 +34,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
 
   Future<void> _refreshStock() async {
     try {
-      final repo = ref.read(inventoryRepositoryProvider);
-      await repo.refreshCache();
-      invalidateAfterInventoryChange(ref);
+      await refreshInventory(ref);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock refreshed')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -73,9 +71,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       builder: (_) => const OpeningStockDialog(),
     );
     if (result == true) {
-      final repo = ref.read(inventoryRepositoryProvider);
-      await repo.refreshCache();
-      invalidateAfterInventoryChange(ref);
+      await refreshInventory(ref);
     }
   }
 
@@ -541,8 +537,7 @@ class _TransferDialogState extends State<_TransferDialog> {
                 quantity: double.parse(_qtyController.text),
                 unitType: widget.item.baseUnit,
               );
-              await repo.refreshCache();
-              invalidateAfterInventoryChange(widget.ref);
+              await refreshInventory(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transfer completed successfully'), backgroundColor: Colors.green));
@@ -634,8 +629,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
                 unitType: widget.item.baseUnit,
                 reason: _reasonController.text.isEmpty ? null : _reasonController.text,
               );
-              await repo.refreshCache();
-              invalidateAfterInventoryChange(widget.ref);
+              await refreshInventory(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -736,8 +730,7 @@ class _AddStockDialogState extends State<_AddStockDialog> {
                 costPerUnit: double.tryParse(_costController.text) ?? 0,
                 reason: _notesController.text.isEmpty ? null : _notesController.text,
               );
-              await repo.refreshCache();
-              invalidateAfterInventoryChange(widget.ref);
+              await refreshInventory(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock added successfully'), backgroundColor: Colors.green));
@@ -843,8 +836,7 @@ class _DeductStockDialogState extends State<_DeductStockDialog> {
                 unitType: widget.item.baseUnit,
                 reason: _reasonController.text,
               );
-              await repo.refreshCache();
-              invalidateAfterInventoryChange(widget.ref);
+              await refreshInventory(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock deducted successfully'), backgroundColor: Colors.green));
