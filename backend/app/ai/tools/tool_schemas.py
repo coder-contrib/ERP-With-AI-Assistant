@@ -894,6 +894,22 @@ TOOL_SCHEMAS = [
             "required": ["to"],
         },
     },
+    {
+        "name": "send_report_to_owner",
+        "description": "Send any report to the owner's WhatsApp number. Supports: daily_operations, daily_sales, monthly_profit, top_products, low_stock, cash_flow, customer_balances, supplier_balances, profit_loss, expense_by_category, inventory_valuation, dead_stock, stock_movement. The owner phone is pre-configured in settings.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "report_type": {"type": "string", "enum": ["daily_operations", "daily_sales", "monthly_profit", "top_products", "low_stock", "cash_flow", "customer_balances", "supplier_balances", "profit_loss", "expense_by_category", "inventory_valuation", "dead_stock", "stock_movement"], "default": "daily_operations", "description": "Type of report to send"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_daily_operations_report",
+        "description": "Get comprehensive daily operations summary including sales (count, total, cash, credit), purchases, expenses, returns, and net cash position. Perfect for voice readback of today's business activity.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # ═══ WORKFLOW TOOLS (Composite Operations) ═══
     {
         "name": "create_invoice_and_notify",
