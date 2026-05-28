@@ -722,7 +722,7 @@ class _LowStockReport extends ConsumerWidget {
                     const SizedBox(height: 8),
                     ...outOfStock.map((i) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text('• ${i['product_name'] ?? ''}', style: const TextStyle(fontSize: 13)),
+                      child: Text('- ${i['product_name'] ?? ''}', style: const TextStyle(fontSize: 13)),
                     )),
                   ],
                 ],
@@ -745,10 +745,9 @@ class _StockMovementReport extends ConsumerWidget {
     final products = (reportData['products'] as List?) ?? [];
     final tableHtml = buildTableHtml(
       sectionTitle: 'Stock Movement (Last 30 Days)',
-      headers: ['Product', 'Total In', 'Total Out', 'Net'],
+      headers: ['Product', 'Total In', 'Total Out'],
       rows: products.map<List<String>>((p) => [
-        p['product_name'] ?? '', '${_fmtAmount(p['total_in'])}',
-        '${_fmtAmount(p['total_out'])}', '${_fmtAmount(p['net_movement'] ?? (double.parse(p['total_in']?.toString() ?? '0') - double.parse(p['total_out']?.toString() ?? '0')))}',
+        p['product_name'] ?? '', '${_fmtAmount(p['total_in'])}', '${_fmtAmount(p['total_out'])}',
       ]).toList(),
     );
     printReportHtml(title: 'Stock Movement Report', tableHtml: tableHtml);
@@ -1214,7 +1213,6 @@ class _ExpenseByCategoryReport extends ConsumerWidget {
             data: (data) {
               final d = data['data'] as Map<String, dynamic>? ?? {};
               final categories = (d['categories'] as List?) ?? [];
-              final grandTotal = double.parse(d['grand_total']?.toString() ?? '0');
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1425,7 +1423,7 @@ class _RiskAssessmentReport extends ConsumerWidget {
     );
   }
 
-  List<Map<String, String>> _buildRisks(dynamic deadStock, dynamic lowStock, dynamic customerBalances) {
+  List<Map<String, String>> _buildRisks(AsyncValue<Map<String, dynamic>> deadStock, AsyncValue<Map<String, dynamic>> lowStock, AsyncValue<Map<String, dynamic>> customerBalances) {
     final risks = <Map<String, String>>[];
     deadStock.whenData((report) {
       final d = report['data'] as Map<String, dynamic>? ?? {};
@@ -1505,7 +1503,7 @@ class _AiSummaryReport extends ConsumerWidget {
     );
   }
 
-  String _buildSummary(dynamic dailySales, dynamic profitLoss, dynamic lowStock) {
+  String _buildSummary(AsyncValue<Map<String, dynamic>> dailySales, AsyncValue<Map<String, dynamic>> profitLoss, AsyncValue<Map<String, dynamic>> lowStock) {
     final lines = <String>[];
 
     dailySales.whenData((report) {
