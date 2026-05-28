@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/print_helper.dart';
+import '../../whatsapp/data/whatsapp_repository.dart';
 import 'reports_provider.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
@@ -31,6 +32,12 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _sendReportToOwner(context),
+        backgroundColor: const Color(0xFF25D366),
+        icon: const Icon(Icons.chat, color: Colors.white),
+        label: const Text('Send Report', style: TextStyle(color: Colors.white)),
+      ),
       body: Column(
         children: [
           Container(
@@ -61,6 +68,45 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
         ],
       ),
     );
+  }
+  void _sendReportToOwner(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.chat, color: Color(0xFF25D366)),
+            const SizedBox(width: 8),
+            const Text('Send Daily Report'),
+          ],
+        ),
+        content: const Text('Send today’s sales report to your WhatsApp?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Send', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final repo = ref.read(whatsappRepositoryProvider);
+      final result = await repo.sendReportToOwner();
+      if (result.containsKey('error')) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'])));
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report sent to your WhatsApp!'), backgroundColor: Color(0xFF25D366)),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 }
 
