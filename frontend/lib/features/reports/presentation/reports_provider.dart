@@ -6,6 +6,11 @@ final reportsTabProvider = StateProvider<int>((ref) => 0);
 
 // === OPERATIONAL REPORTS (Tab 0) ===
 
+final reportsDailyOperationsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(reportsRepositoryProvider);
+  return repo.getDailyOperations();
+});
+
 final reportsDailySalesProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final repo = ref.read(reportsRepositoryProvider);
   return repo.getDailySales();
