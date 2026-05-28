@@ -1344,110 +1344,108 @@ class _RiskAssessmentReport extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final deadStock = ref.watch(reportsDeadStockProvider);
-    final lowStock = ref.watch(reportsLowStockProvider);
-    final customerBalances = ref.watch(reportsCustomerBalancesProvider);
+    final riskAsync = ref.watch(reportsAiRiskAssessmentProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _reportHeader('Risk Assessment', () {
-            final risks = _buildRisks(deadStock, lowStock, customerBalances);
-            final tableHtml = buildTableHtml(
-              sectionTitle: 'Business Risk Report',
-              headers: ['Risk Type', 'Severity', 'Details'],
-              rows: risks.map<List<String>>((r) => [r['type'] ?? '', r['severity'] ?? '', r['detail'] ?? '']).toList(),
-            );
-            printReportHtml(title: 'Risk Assessment Report', tableHtml: tableHtml);
-          }),
-          const SizedBox(height: 16),
-          Builder(builder: (_) {
-            final risks = _buildRisks(deadStock, lowStock, customerBalances);
-            if (risks.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(color: AppColors.success.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: AppColors.success, size: 24),
-                    SizedBox(width: 12),
-                    Text('No significant risks detected', style: TextStyle(fontSize: 16, color: AppColors.success, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              );
-            }
-            return Column(
-              children: risks.map((r) {
-                final isHigh = r['severity'] == 'HIGH';
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.3)),
-                  ),
-                  child: Row(
+          riskAsync.when(
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
+            error: (e, _) => Center(child: Text('Error loading AI risk data: $e', style: const TextStyle(color: AppColors.error))),
+            data: (report) {
+              final data = report['data'] as Map<String, dynamic>? ?? {};
+              final risks = (data['risks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _reportHeader('AI Risk Assessment', () {
+                    final tableHtml = buildTableHtml(
+                      sectionTitle: 'AI Risk Assessment Report',
+                      headers: ['Risk Type', 'Severity', 'Title', 'Details', 'Method'],
+                      rows: risks.map<List<String>>((r) => [
+                        r['type']?.toString() ?? '',
+                        r['severity']?.toString() ?? '',
+                        r['title']?.toString() ?? '',
+                        r['detail']?.toString() ?? '',
+                        r['detection_method']?.toString() ?? '',
+                      ]).toList(),
+                    );
+                    printReportHtml(title: 'AI Risk Assessment Report', tableHtml: tableHtml);
+                  }),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
                     children: [
-                      Icon(isHigh ? Icons.error : Icons.warning, size: 24, color: isHigh ? AppColors.error : AppColors.warning),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(r['type']!, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isHigh ? AppColors.error : AppColors.warning)),
-                            const SizedBox(height: 4),
-                            Text(r['detail']!, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(r['severity']!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isHigh ? AppColors.error : AppColors.warning)),
-                      ),
+                      _statBadge('Total Risks', '${data['total_risks'] ?? 0}', AppColors.warning),
+                      _statBadge('High', '${data['high_severity_count'] ?? 0}', AppColors.error),
+                      _statBadge('Medium', '${data['medium_severity_count'] ?? 0}', Colors.orange),
+                      _statBadge('Anomalies', '${data['anomalies_detected'] ?? 0}', Colors.purple),
                     ],
                   ),
-                );
-              }).toList(),
-            );
-          }),
+                  const SizedBox(height: 16),
+                  if (risks.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(color: AppColors.success.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle, color: AppColors.success, size: 24),
+                          SizedBox(width: 12),
+                          Text('No significant risks detected', style: TextStyle(fontSize: 16, color: AppColors.success, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    )
+                  else
+                    ...risks.map((r) {
+                      final isHigh = r['severity'] == 'HIGH';
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(isHigh ? Icons.error : Icons.warning, size: 24, color: isHigh ? AppColors.error : AppColors.warning),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(r['title']?.toString() ?? r['type']?.toString() ?? '', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isHigh ? AppColors.error : AppColors.warning)),
+                                  const SizedBox(height: 4),
+                                  Text(r['detail']?.toString() ?? '', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                                  const SizedBox(height: 4),
+                                  Text('Detection: ${r['detection_method']?.toString().replaceAll('_', ' ') ?? 'ai'}', style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary)),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: (isHigh ? AppColors.error : AppColors.warning).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(r['severity']?.toString() ?? '', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isHigh ? AppColors.error : AppColors.warning)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
-  }
-
-  List<Map<String, String>> _buildRisks(AsyncValue<Map<String, dynamic>> deadStock, AsyncValue<Map<String, dynamic>> lowStock, AsyncValue<Map<String, dynamic>> customerBalances) {
-    final risks = <Map<String, String>>[];
-    deadStock.whenData((report) {
-      final d = report['data'] as Map<String, dynamic>? ?? {};
-      final count = d['dead_stock_count'] ?? 0;
-      final value = double.parse(d['total_capital_locked']?.toString() ?? '0');
-      if (count > 0) {
-        risks.add({'type': 'Dead Stock', 'severity': value > 50000 ? 'HIGH' : 'MEDIUM', 'detail': '$count products, ${value.toStringAsFixed(0)} IQD capital locked'});
-      }
-    });
-    lowStock.whenData((report) {
-      final d = report['data'] as Map<String, dynamic>? ?? {};
-      final oos = d['out_of_stock_count'] ?? 0;
-      if (oos > 0) {
-        risks.add({'type': 'Out of Stock', 'severity': oos > 5 ? 'HIGH' : 'MEDIUM', 'detail': '$oos products out of stock — potential lost sales'});
-      }
-    });
-    customerBalances.whenData((report) {
-      final items = (report['data'] as List?) ?? [];
-      final overLimit = items.where((c) => c['over_limit'] == true).length;
-      if (overLimit > 0) {
-        risks.add({'type': 'Credit Risk', 'severity': 'HIGH', 'detail': '$overLimit customers over credit limit'});
-      }
-    });
-    return risks;
   }
 }
 
@@ -1456,95 +1454,116 @@ class _AiSummaryReport extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dailySales = ref.watch(reportsDailySalesProvider);
-    final profitLoss = ref.watch(reportsProfitLossProvider);
-    final lowStock = ref.watch(reportsLowStockProvider);
+    final summaryAsync = ref.watch(reportsAiDailySummaryProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _reportHeader('AI Daily Summary', () {
-            final summary = _buildSummary(dailySales, profitLoss, lowStock);
-            printReportHtml(title: 'AI Daily Summary', tableHtml: '<div style="font-size:14px;line-height:2;">$summary</div>');
-          }),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.purple.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.purple.withOpacity(0.15)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 20, color: Colors.purple),
-                    SizedBox(width: 10),
-                    Text('AI Generated Insights', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.purple)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Builder(builder: (_) {
-                  final summary = _buildSummary(dailySales, profitLoss, lowStock);
-                  if (summary.isEmpty) {
-                    return const Text('Loading insights...', style: TextStyle(fontSize: 14));
-                  }
-                  return Text(summary, style: const TextStyle(fontSize: 14, height: 1.8));
-                }),
-              ],
-            ),
+          summaryAsync.when(
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
+            error: (e, _) => Center(child: Text('Error loading AI summary: $e', style: const TextStyle(color: AppColors.error))),
+            data: (report) {
+              final data = report['data'] as Map<String, dynamic>? ?? {};
+              final insights = (data['insights'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+              final metrics = data['metrics'] as Map<String, dynamic>? ?? {};
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _reportHeader('AI Daily Summary', () {
+                    final insightText = insights.map((i) => '<p><b>${i['category']}:</b> ${i['text']}</p>').join('\n');
+                    printReportHtml(title: 'AI Daily Summary', tableHtml: '<div style="font-size:14px;line-height:2;">$insightText</div>');
+                  }),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      _statBadge('Revenue Today', metrics['revenue_today']?.toString() ?? '0', AppColors.primary),
+                      _statBadge('Avg 30d', metrics['revenue_avg_30d']?.toString() ?? '0', AppColors.info),
+                      _statBadge('Net Margin', '${metrics['net_margin'] ?? 0}%', AppColors.success),
+                      _statBadge('Stock at Risk', metrics['stock_at_risk']?.toString() ?? '0', AppColors.warning),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.03),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.purple.withOpacity(0.15)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.auto_awesome, size: 20, color: Colors.purple),
+                            SizedBox(width: 10),
+                            Text('AI Generated Insights', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.purple)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (insights.isEmpty)
+                          const Text('No insights available at this time.', style: TextStyle(fontSize: 14, color: AppColors.textSecondary))
+                        else
+                          ...insights.map((insight) {
+                            final sentiment = insight['sentiment']?.toString() ?? 'neutral';
+                            final color = sentiment == 'positive' ? AppColors.success : (sentiment == 'negative' ? AppColors.error : (sentiment == 'warning' ? AppColors.warning : AppColors.textSecondary));
+                            final icon = _getInsightIcon(insight['icon']?.toString() ?? 'info');
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: color.withOpacity(0.15)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(icon, size: 20, color: color),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(insight['category']?.toString() ?? '', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+                                        const SizedBox(height: 4),
+                                        Text(insight['text']?.toString() ?? '', style: TextStyle(fontSize: 13, color: isDark ? AppColors.darkText : AppColors.text)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  String _buildSummary(AsyncValue<Map<String, dynamic>> dailySales, AsyncValue<Map<String, dynamic>> profitLoss, AsyncValue<Map<String, dynamic>> lowStock) {
-    final lines = <String>[];
-
-    dailySales.whenData((report) {
-      final items = (report['data'] as List?) ?? [];
-      if (items.length >= 2) {
-        final today = double.parse(items.last['total_sales']?.toString() ?? '0');
-        final yesterday = double.parse(items[items.length - 2]['total_sales']?.toString() ?? '0');
-        final change = yesterday > 0 ? ((today - yesterday) / yesterday * 100) : 0;
-        if (change > 0) {
-          lines.add('Sales increased by ${change.toStringAsFixed(1)}% compared to yesterday.');
-        } else if (change < 0) {
-          lines.add('Sales decreased by ${change.abs().toStringAsFixed(1)}% compared to yesterday.');
-        }
-        lines.add('Today: ${items.last['invoice_count']} invoices totaling ${today.toStringAsFixed(0)} IQD.');
-      }
-    });
-
-    profitLoss.whenData((report) {
-      final d = report['data'] as Map<String, dynamic>? ?? {};
-      final margin = double.parse(d['net_margin_pct']?.toString() ?? '0');
-      final netProfit = double.parse(d['net_profit']?.toString() ?? '0');
-      if (margin < 10 && netProfit > 0) {
-        lines.add('Profit margin is low (${margin.toStringAsFixed(1)}%) — consider reducing discounts or expenses.');
-      } else if (netProfit < 0) {
-        lines.add('WARNING: Operating at a loss. Review expenses and pricing urgently.');
-      } else if (margin > 20) {
-        lines.add('Healthy profit margin of ${margin.toStringAsFixed(1)}%.');
-      }
-    });
-
-    lowStock.whenData((report) {
-      final d = report['data'] as Map<String, dynamic>? ?? {};
-      final oos = d['out_of_stock_count'] ?? 0;
-      final low = d['low_stock_count'] ?? 0;
-      if (oos > 0) {
-        lines.add('$oos products are out of stock — reorder urgently to avoid lost sales.');
-      } else if (low > 0) {
-        lines.add('$low products are running low — consider reordering soon.');
-      }
-    });
-
-    return lines.join('\n\n');
+  IconData _getInsightIcon(String name) {
+    switch (name) {
+      case 'trending_up': return Icons.trending_up;
+      case 'trending_down': return Icons.trending_down;
+      case 'warning': return Icons.warning;
+      case 'error': return Icons.error;
+      case 'check_circle': return Icons.check_circle;
+      case 'star': return Icons.star;
+      case 'inventory': return Icons.inventory;
+      case 'info': return Icons.info;
+      case 'compare_arrows': return Icons.compare_arrows;
+      default: return Icons.auto_awesome;
+    }
   }
 }
