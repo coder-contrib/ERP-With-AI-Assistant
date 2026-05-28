@@ -9,8 +9,6 @@ from app.services.report_service import ReportService
 router = APIRouter()
 
 
-# ─── EXISTING ENDPOINTS ─────────────────────────────────────────────
-
 @router.get("/daily-sales")
 def daily_sales_report(
     start_date: date = Query(default=None),
@@ -126,8 +124,6 @@ def warehouse_stock_report(
     return {"report": "warehouse_stock", "data": service.warehouse_stock(warehouse_id)}
 
 
-# ─── NEW: SALES REPORTS ─────────────────────────────────────────────
-
 @router.get("/sales-by-period")
 def sales_by_period_report(
     period: str = Query(default="day", regex="^(day|week|month)$"),
@@ -176,8 +172,6 @@ def product_performance_report(
     return {"report": "product_performance", "data": service.product_performance(start_date, end_date)}
 
 
-# ─── NEW: INVENTORY REPORTS ─────────────────────────────────────────
-
 @router.get("/low-stock")
 def low_stock_report(
     threshold: int = Query(default=10),
@@ -213,8 +207,6 @@ def dead_stock_report(
     return {"report": "dead_stock", "data": service.dead_stock(days)}
 
 
-# ─── NEW: FINANCE REPORTS ───────────────────────────────────────────
-
 @router.get("/profit-loss")
 def profit_loss_report(
     start_date: date = Query(default=None),
@@ -245,8 +237,6 @@ def expense_by_category_report(
     return {"report": "expense_by_category", "data": service.expense_by_category(start_date, end_date)}
 
 
-# ─── NEW: CUSTOMER REPORTS ──────────────────────────────────────────
-
 @router.get("/customer-profile/{customer_id}")
 def customer_profile_report(
     customer_id: int,
@@ -275,3 +265,108 @@ def customer_segmentation_report(
 ):
     service = ReportService(db)
     return {"report": "customer_segmentation", "data": service.customer_segmentation()}
+
+
+# ─── AI-POWERED REPORTS ────────────────────────────────────────
+
+@router.get("/ai-risk-assessment")
+def ai_risk_assessment_report(
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    from app.ai.anomaly_detector import AnomalyDetector
+    from app.ai.tools.reporting_tools import ReportingTools
+
+    anomaly = AnomalyDetector(db)
+    tools = ReportingTools(db)
+    service = ReportService(db)
+
+    anomalies = anomaly.scan_all_anomalies()
+    low_stock_pred = tools.low_stock_prediction(days_ahead=7)
+    dead_stock_data = service.dead_stock(days=30)
+    customer_risks = service.customer_balances()
+    over_limit = [c for c in customer_risks if c.get("over_limit")]
+
+    risks = []
+    for a in anomalies:
+        risks.append({"type": a["type"].replace("_", " ").title(), "severity": "HIGH" if a["severity"] == "critical" else "MEDIUM", "title": a["title"], "detail": a["message"], "detection_method": a["detection_method"]})
+
+    if low_stock_pred["at_risk_count"] > 0:
+        urgent = [p for p in low_stock_pred["products"] if p["days_left"] <= 3]
+        if urgent:
+            risks.append({"type": "Stock Shortage Predicted", "severity": "HIGH", "title": f"{len(urgent)} products will run out within 3 days", "detail": ", ".join([p["product_name"] for p in urgent[:5]]), "detection_method": "ai_prediction"})
+        else:
+            risks.append({"type": "Low Stock Forecast", "severity": "MEDIUM", "title": f"{low_stock_pred['at_risk_count']} products at risk within 7 days", "detail": ", ".join([p["product_name"] for p in low_stock_pred["products"][:5]]), "detection_method": "ai_prediction"})
+
+    if dead_stock_data["dead_stock_count"] > 0:
+        capital = float(dead_stock_data["total_capital_locked"])
+        risks.append({"type": "Dead Stock Capital", "severity": "HIGH" if capital > 50000 else "MEDIUM", "title": f"{dead_stock_data['dead_stock_count']} products with no movement in 30 days", "detail": f"{capital:,.0f} IQD capital locked", "detection_method": "inventory_analysis"})
+
+    if over_limit:
+        total_over = sum(float(c["current_balance"]) for c in over_limit)
+        risks.append({"type": "Credit Exposure", "severity": "HIGH", "title": f"{len(over_limit)} customers over credit limit", "detail": f"Total overdue: {total_over:,.0f} IQD", "detection_method": "credit_analysis"})
+
+    risks.sort(key=lambda r: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(r["severity"], 3))
+    return {"report": "ai_risk_assessment", "data": {"generated_at": str(date.today()), "total_risks": len(risks), "high_severity_count": len([r for r in risks if r["severity"] == "HIGH"]), "medium_severity_count": len([r for r in risks if r["severity"] == "MEDIUM"]), "risks": risks, "anomalies_detected": len(anomalies), "stock_at_risk": low_stock_pred["at_risk_count"]}}
+
+
+@router.get("/ai-daily-summary")
+def ai_daily_summary_report(
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    from app.ai.anomaly_detector import AnomalyDetector
+    from app.ai.tools.reporting_tools import ReportingTools
+
+    anomaly = AnomalyDetector(db)
+    tools = ReportingTools(db)
+    service = ReportService(db)
+    today = date.today()
+    start_30d = today - timedelta(days=30)
+
+    profit_data = tools.profit_analysis(str(start_30d), str(today))
+    revenue_anomaly = anomaly.detect_revenue_anomaly()
+    expense_anomaly = anomaly.detect_expense_anomaly()
+    profit_anomaly = anomaly.detect_profit_anomaly()
+    trending = tools.best_selling_prediction(days_back=14)
+    stock_pred = tools.low_stock_prediction(days_ahead=7)
+    daily_sales = service.daily_sales(today - timedelta(days=2), today)
+
+    insights = []
+    if revenue_anomaly["current"] > 0:
+        if revenue_anomaly["is_anomaly"]:
+            direction = "above" if revenue_anomaly["direction"] == "high" else "below"
+            insights.append({"category": "Revenue", "icon": "trending_up" if direction == "above" else "trending_down", "text": f"Revenue ({revenue_anomaly['current']:,.0f} IQD) is {direction} 30-day avg ({revenue_anomaly['mean_30d']:,.0f} IQD). Z-score: {revenue_anomaly['z_score']:.1f}", "sentiment": "positive" if direction == "above" else "negative"})
+        else:
+            insights.append({"category": "Revenue", "icon": "check_circle", "text": f"Revenue normal ({revenue_anomaly['current']:,.0f} IQD vs avg {revenue_anomaly['mean_30d']:,.0f} IQD).", "sentiment": "neutral"})
+
+    if profit_data and "profit_trend" in profit_data:
+        if profit_data["profit_trend"] == "decreasing":
+            insights.append({"category": "Profit Trend", "icon": "warning", "text": f"Profit declining. Margin: {profit_data['net_margin_percent']}%. {'; '.join(profit_data.get('issues', []))}", "sentiment": "negative"})
+        elif profit_data["profit_trend"] == "increasing":
+            insights.append({"category": "Profit Trend", "icon": "trending_up", "text": f"Profit growing. Margin: {profit_data['net_margin_percent']}%.", "sentiment": "positive"})
+        else:
+            insights.append({"category": "Profit Trend", "icon": "check_circle", "text": f"Profit stable. Margin: {profit_data['net_margin_percent']}%.", "sentiment": "neutral"})
+
+    if expense_anomaly["is_anomaly"] and expense_anomaly["direction"] == "high":
+        insights.append({"category": "Expenses", "icon": "error", "text": f"Expense spike: {expense_anomaly['current']:,.0f} vs avg {expense_anomaly['mean_30d']:,.0f} IQD.", "sentiment": "negative"})
+
+    trending_up = trending.get("trending_up", [])[:3]
+    if trending_up:
+        insights.append({"category": "Product Trends", "icon": "star", "text": f"Trending: {', '.join([p['product_name'] for p in trending_up])}. Growth: {trending_up[0]['growth_percent']}%.", "sentiment": "positive"})
+
+    if stock_pred["at_risk_count"] > 0:
+        critical = [p for p in stock_pred["products"] if p["days_left"] <= 3]
+        if critical:
+            insights.append({"category": "Stock Alert", "icon": "inventory", "text": f"URGENT: {len(critical)} products run out in 3 days.", "sentiment": "negative"})
+        else:
+            insights.append({"category": "Stock Alert", "icon": "info", "text": f"{stock_pred['at_risk_count']} products may run out in 7 days.", "sentiment": "warning"})
+
+    if len(daily_sales) >= 2:
+        today_s = float(daily_sales[-1].get("total_sales", 0))
+        yest_s = float(daily_sales[-2].get("total_sales", 0))
+        if yest_s > 0:
+            pct = (today_s - yest_s) / yest_s * 100
+            insights.append({"category": "Daily Comparison", "icon": "compare_arrows", "text": f"Today: {today_s:,.0f} IQD ({pct:+.1f}% vs yesterday).", "sentiment": "positive" if pct > 0 else "negative"})
+
+    return {"report": "ai_daily_summary", "data": {"generated_at": str(today), "insights": insights, "metrics": {"revenue_today": revenue_anomaly.get("current", 0), "revenue_avg_30d": revenue_anomaly.get("mean_30d", 0), "profit_trend": profit_data.get("profit_trend", "unknown") if profit_data else "unknown", "net_margin": profit_data.get("net_margin_percent", 0) if profit_data else 0, "stock_at_risk": stock_pred["at_risk_count"], "anomalies_detected": sum([1 if revenue_anomaly.get("is_anomaly") else 0, 1 if expense_anomaly.get("is_anomaly") else 0, 1 if profit_anomaly.get("is_anomaly") else 0])}}}
