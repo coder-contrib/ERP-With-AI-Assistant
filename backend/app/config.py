@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     debug: bool = False
     allowed_origins: str = "http://localhost:3000,http://localhost:5173"
 
+    # Azure Speech (Egyptian Arabic TTS)
+    azure_speech_key: str = ""
+    azure_speech_region: str = "eastus"
+    azure_tts_voice: str = "ar-EG-ShakirNeural"
+
     # AI Tool Permissions
     ai_can_write: bool = True
     ai_max_transaction: float = 50000
