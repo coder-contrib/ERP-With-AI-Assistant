@@ -81,6 +81,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
           ],
         ),
         children: [
+          _reportOption(ctx, 'daily_operations', 'Daily Operations (Full)', Icons.summarize),
           _reportOption(ctx, 'daily_sales', 'Daily Sales', Icons.today),
           _reportOption(ctx, 'monthly_profit', 'Monthly Profit', Icons.calendar_month),
           _reportOption(ctx, 'profit_loss', 'Profit & Loss', Icons.account_balance),
