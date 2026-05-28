@@ -50,6 +50,8 @@ ROLE_AI_TOOLS = {
             "list_users",
             "get_ledger_entries", "get_account_balance", "get_trial_balance",
             "confirm_transaction",
+            # WhatsApp tools
+            "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
         ],
     },
     "cashier": {
@@ -83,6 +85,7 @@ ROLE_AI_TOOLS = {
             "refresh_daily_summary", "refresh_summary_range",
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
             "get_ledger_entries", "get_account_balance", "get_trial_balance",
+            "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
         ],
     },
     "warehouse_employee": {
@@ -115,6 +118,7 @@ ROLE_AI_TOOLS = {
             "refresh_daily_summary", "refresh_summary_range",
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
             "get_ledger_entries", "get_account_balance", "get_trial_balance",
+            "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
         ],
     },
     "accountant": {
@@ -155,6 +159,7 @@ ROLE_AI_TOOLS = {
             "create_product", "update_product",
             "create_category", "update_category", "delete_category",
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
+            "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
         ],
     },
     "ai_agent": {

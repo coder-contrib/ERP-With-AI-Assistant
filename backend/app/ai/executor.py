@@ -53,6 +53,7 @@ class ToolExecutor:
         from app.ai.tools.action_tools import ActionTools
         from app.ai.tools.extended_tools import ExtendedTools
         from app.ai.tools.admin_tools import AdminTools
+        from app.ai.tools.whatsapp_tools import WhatsAppTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
@@ -62,6 +63,7 @@ class ToolExecutor:
         actions = ActionTools(self.db)
         extended = ExtendedTools(self.db)
         admin = AdminTools(self.db)
+        whatsapp = WhatsAppTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         return {
@@ -325,6 +327,15 @@ class ToolExecutor:
             ),
             "get_account_balance": lambda **p: admin.get_account_balance(p["account_id"]),
             "get_trial_balance": lambda **_: admin.get_trial_balance(),
+            # --- WhatsApp ---
+            "send_whatsapp_message": lambda **p: whatsapp.send_whatsapp_message(
+                to=p["to"],
+                message=p["message"],
+            ),
+            "send_overdue_reminders": lambda **_: whatsapp.send_overdue_reminders(),
+            "send_daily_sales_report": lambda **p: whatsapp.send_daily_sales_report(
+                to=p["to"],
+            ),
             # --- Safety: Confirmation ---
             "confirm_transaction": lambda **p: self._confirm_transaction(p["confirmation_id"]),
         }
