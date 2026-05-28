@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas.inventory import StockResponse, InventoryTransactionCreate
+from app.schemas.inventory import StockResponse, InventoryTransactionCreate, InventoryTransactionResponse
 from app.services.inventory_service import InventoryService
 from app.core.deps import require_permission
 from app.models.users import User
@@ -19,6 +19,12 @@ def get_stock(warehouse_id: int | None = None, current_user: User = Depends(requ
 def get_product_stock(product_id: int, current_user: User = Depends(require_permission("inventory:read")), db: Session = Depends(get_db)):
     service = InventoryService(db)
     return service.get_product_stock(product_id)
+
+
+@router.get("/transactions/{product_id}", response_model=list[InventoryTransactionResponse])
+def get_product_transactions(product_id: int, limit: int = Query(default=50, le=200), current_user: User = Depends(require_permission("inventory:read")), db: Session = Depends(get_db)):
+    service = InventoryService(db)
+    return service.get_product_transactions(product_id, limit)
 
 
 @router.post("/transactions", status_code=201)
