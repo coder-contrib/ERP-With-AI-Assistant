@@ -9,6 +9,8 @@ from app.services.report_service import ReportService
 router = APIRouter()
 
 
+# ─── EXISTING ENDPOINTS ─────────────────────────────────────────────
+
 @router.get("/daily-sales")
 def daily_sales_report(
     start_date: date = Query(default=None),
@@ -122,3 +124,154 @@ def warehouse_stock_report(
 ):
     service = ReportService(db)
     return {"report": "warehouse_stock", "data": service.warehouse_stock(warehouse_id)}
+
+
+# ─── NEW: SALES REPORTS ─────────────────────────────────────────────
+
+@router.get("/sales-by-period")
+def sales_by_period_report(
+    period: str = Query(default="day", regex="^(day|week|month)$"),
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "sales_by_period", "data": service.sales_by_period(period, start_date, end_date)}
+
+
+@router.get("/sales-invoices")
+def sales_invoices_report(
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    status: str | None = Query(default=None),
+    payment_method: str | None = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "sales_invoices", "data": service.sales_invoices(start_date, end_date, status, payment_method)}
+
+
+@router.get("/product-performance")
+def product_performance_report(
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "product_performance", "data": service.product_performance(start_date, end_date)}
+
+
+# ─── NEW: INVENTORY REPORTS ─────────────────────────────────────────
+
+@router.get("/low-stock")
+def low_stock_report(
+    threshold: int = Query(default=10),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    return {"report": "low_stock", "data": service.low_stock_alert(threshold)}
+
+
+@router.get("/stock-movement")
+def stock_movement_report(
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "stock_movement", "data": service.stock_movement(start_date, end_date)}
+
+
+@router.get("/dead-stock")
+def dead_stock_report(
+    days: int = Query(default=30),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    return {"report": "dead_stock", "data": service.dead_stock(days)}
+
+
+# ─── NEW: FINANCE REPORTS ───────────────────────────────────────────
+
+@router.get("/profit-loss")
+def profit_loss_report(
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "profit_loss", "data": service.profit_loss(start_date, end_date)}
+
+
+@router.get("/expense-by-category")
+def expense_by_category_report(
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    if not start_date:
+        start_date = date.today() - timedelta(days=30)
+    if not end_date:
+        end_date = date.today()
+    service = ReportService(db)
+    return {"report": "expense_by_category", "data": service.expense_by_category(start_date, end_date)}
+
+
+# ─── NEW: CUSTOMER REPORTS ──────────────────────────────────────────
+
+@router.get("/customer-profile/{customer_id}")
+def customer_profile_report(
+    customer_id: int,
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    return {"report": "customer_profile", "data": service.customer_profile(customer_id)}
+
+
+@router.get("/customer-activity/{customer_id}")
+def customer_activity_report(
+    customer_id: int,
+    limit: int = Query(default=50, le=200),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    return {"report": "customer_activity", "data": service.customer_activity(customer_id, limit)}
+
+
+@router.get("/customer-segmentation")
+def customer_segmentation_report(
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    return {"report": "customer_segmentation", "data": service.customer_segmentation()}
