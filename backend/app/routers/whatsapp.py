@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
+from datetime import date, timedelta
 from app.database import get_db
 from app.core.deps import require_permission
 from app.models.users import User
@@ -18,6 +19,10 @@ class SendMessageRequest(BaseModel):
 
 class SendDailyReportRequest(BaseModel):
     to: str
+
+
+class SendReportToOwnerRequest(BaseModel):
+    report_type: str = "daily_sales"
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -99,15 +104,244 @@ def send_daily_report(
 
 @router.post("/send-report-to-owner")
 def send_report_to_owner(
+    body: SendReportToOwnerRequest = SendReportToOwnerRequest(),
     current_user: User = Depends(require_permission("admin:read")),
     db: Session = Depends(get_db),
 ):
     if not settings.whatsapp_owner_phone:
-        return {"error": "Owner phone number not configured. Set WHATSAPP_OWNER_PHONE in settings."}
+        return {"error": "Owner phone number not configured. Go to WhatsApp Settings and set your phone number."}
+
+    report_type = body.report_type
+    msg = _generate_report_message(db, report_type)
+
+    if msg is None:
+        return {"error": f"Unknown report type: {report_type}"}
 
     tools = WhatsAppTools(db)
-    result = tools.send_daily_sales_report(settings.whatsapp_owner_phone)
+    result = tools.send_whatsapp_message(settings.whatsapp_owner_phone, msg)
+    result["report_type"] = report_type
     return result
+
+
+def _generate_report_message(db: Session, report_type: str) -> str | None:
+    today = date.today().isoformat()
+
+    if report_type == "daily_sales":
+        row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+            FROM sales_invoices WHERE DATE(created_at) = :today
+        """), {"today": today}).fetchone()
+        count, total, paid = row if row else (0, 0, 0)
+        expenses = db.execute(text("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE DATE(expense_date) = :today"), {"today": today}).scalar() or 0
+        return (
+            f"\U0001f4ca تقرير المبيعات اليومي - {today}\n"
+            f"───────────────\n"
+            f"\U0001f4cb عدد الفواتير: {count}\n"
+            f"\U0001f4b0 إجمالي المبيعات: {float(total):,.0f} جنيه\n"
+            f"\U0001f4b5 النقدي المحصل: {float(paid):,.0f} جنيه\n"
+            f"\U0001f4c9 المصروفات: {float(expenses):,.0f} جنيه\n"
+            f"───────────────\n"
+            f"\U0001f4c8 صافي: {float(total) - float(expenses):,.0f} جنيه"
+        )
+
+    elif report_type == "monthly_profit":
+        first_of_month = date.today().replace(day=1).isoformat()
+        row = db.execute(text("""
+            SELECT COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0), COUNT(id)
+            FROM sales_invoices WHERE DATE(created_at) >= :start
+        """), {"start": first_of_month}).fetchone()
+        total, paid, count = row if row else (0, 0, 0)
+        expenses = db.execute(text("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE DATE(expense_date) >= :start"), {"start": first_of_month}).scalar() or 0
+        return (
+            f"\U0001f4c8 تقرير الأرباح الشهري\n"
+            f"من {first_of_month} إلى {today}\n"
+            f"───────────────\n"
+            f"\U0001f4cb عدد الفواتير: {count}\n"
+            f"\U0001f4b0 إجمالي المبيعات: {float(total):,.0f} جنيه\n"
+            f"\U0001f4b5 المحصل: {float(paid):,.0f} جنيه\n"
+            f"\U0001f4c9 المصروفات: {float(expenses):,.0f} جنيه\n"
+            f"───────────────\n"
+            f"\U0001f4b0 صافي الربح: {float(total) - float(expenses):,.0f} جنيه"
+        )
+
+    elif report_type == "cash_flow":
+        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        income = db.execute(text("SELECT COALESCE(SUM(paid_amount), 0) FROM sales_invoices WHERE DATE(created_at) >= :start"), {"start": week_ago}).scalar() or 0
+        expenses = db.execute(text("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE DATE(expense_date) >= :start"), {"start": week_ago}).scalar() or 0
+        purchases = db.execute(text("SELECT COALESCE(SUM(total_amount), 0) FROM purchase_invoices WHERE DATE(created_at) >= :start"), {"start": week_ago}).scalar() or 0
+        return (
+            f"\U0001f4b8 تقرير التدفق النقدي\n"
+            f"آخر 7 أيام ({week_ago} → {today})\n"
+            f"───────────────\n"
+            f"\U0001f4b5 الداخل (مبيعات): {float(income):,.0f} جنيه\n"
+            f"\U0001f4c9 مصروفات: {float(expenses):,.0f} جنيه\n"
+            f"\U0001f6d2 مشتريات: {float(purchases):,.0f} جنيه\n"
+            f"───────────────\n"
+            f"\U0001f4ca صافي التدفق: {float(income) - float(expenses) - float(purchases):,.0f} جنيه"
+        )
+
+    elif report_type == "top_products":
+        rows = db.execute(text("""
+            SELECT p.name, SUM(si.quantity) as qty, SUM(si.total_price) as revenue
+            FROM sale_items si
+            JOIN products p ON p.id = si.product_id
+            JOIN sales_invoices inv ON inv.id = si.invoice_id
+            WHERE DATE(inv.created_at) >= :start
+            GROUP BY p.id, p.name
+            ORDER BY revenue DESC
+            LIMIT 10
+        """), {"start": (date.today() - timedelta(days=30)).isoformat()}).fetchall()
+        lines = [f"\U0001f3c6 أعلى المنتجات مبيعاً (30 يوم)\n───────────────"]
+        for i, (name, qty, rev) in enumerate(rows, 1):
+            lines.append(f"{i}. {name}: {int(qty)} قطعة ({float(rev):,.0f} جنيه)")
+        if not rows:
+            lines.append("لا توجد مبيعات")
+        return "\n".join(lines)
+
+    elif report_type == "inventory_valuation":
+        row = db.execute(text("""
+            SELECT COUNT(id), COALESCE(SUM(quantity * cost_price), 0), COALESCE(SUM(quantity), 0)
+            FROM products WHERE quantity > 0
+        """)).fetchone()
+        product_count, total_value, total_qty = row if row else (0, 0, 0)
+        return (
+            f"\U0001f4e6 تقييم المخزون\n"
+            f"───────────────\n"
+            f"\U0001f4cb عدد المنتجات: {product_count}\n"
+            f"\U0001f4e6 إجمالي الكمية: {int(total_qty)} قطعة\n"
+            f"\U0001f4b0 قيمة المخزون: {float(total_value):,.0f} جنيه"
+        )
+
+    elif report_type == "low_stock":
+        rows = db.execute(text("""
+            SELECT name, quantity, min_stock
+            FROM products
+            WHERE quantity <= min_stock AND quantity > 0
+            ORDER BY quantity ASC
+            LIMIT 15
+        """)).fetchall()
+        lines = [f"⚠️ تنبيه المخزون المنخفض\n───────────────"]
+        for name, qty, min_s in rows:
+            lines.append(f"• {name}: {int(qty)} (الحد الأدنى: {int(min_s)})")
+        if not rows:
+            lines.append("✅ لا يوجد نقص في المخزون")
+        return "\n".join(lines)
+
+    elif report_type == "customer_balances":
+        rows = db.execute(text("""
+            SELECT c.name, SUM(si.total_amount - si.paid_amount) as balance
+            FROM customers c
+            JOIN sales_invoices si ON si.customer_id = c.id
+            WHERE si.payment_status IN ('unpaid', 'partial')
+            GROUP BY c.id, c.name
+            HAVING SUM(si.total_amount - si.paid_amount) > 0
+            ORDER BY balance DESC
+            LIMIT 10
+        """)).fetchall()
+        total = sum(float(b) for _, b in rows)
+        lines = [f"\U0001f4b3 أرصدة العملاء المستحقة\n───────────────\nالإجمالي: {total:,.0f} جنيه\n"]
+        for name, balance in rows:
+            lines.append(f"• {name}: {float(balance):,.0f} جنيه")
+        if not rows:
+            lines.append("✅ لا توجد أرصدة مستحقة")
+        return "\n".join(lines)
+
+    elif report_type == "supplier_balances":
+        rows = db.execute(text("""
+            SELECT s.name, SUM(pi.total_amount - pi.paid_amount) as balance
+            FROM suppliers s
+            JOIN purchase_invoices pi ON pi.supplier_id = s.id
+            WHERE pi.payment_status IN ('unpaid', 'partial')
+            GROUP BY s.id, s.name
+            HAVING SUM(pi.total_amount - pi.paid_amount) > 0
+            ORDER BY balance DESC
+            LIMIT 10
+        """)).fetchall()
+        total = sum(float(b) for _, b in rows)
+        lines = [f"\U0001f69a أرصدة الموردين المستحقة\n───────────────\nالإجمالي: {total:,.0f} جنيه\n"]
+        for name, balance in rows:
+            lines.append(f"• {name}: {float(balance):,.0f} جنيه")
+        if not rows:
+            lines.append("✅ لا توجد مستحقات للموردين")
+        return "\n".join(lines)
+
+    elif report_type == "expense_by_category":
+        first_of_month = date.today().replace(day=1).isoformat()
+        rows = db.execute(text("""
+            SELECT category, SUM(amount) as total
+            FROM expenses
+            WHERE DATE(expense_date) >= :start
+            GROUP BY category
+            ORDER BY total DESC
+        """), {"start": first_of_month}).fetchall()
+        grand_total = sum(float(t) for _, t in rows)
+        lines = [f"\U0001f4c9 المصروفات حسب الفئة (هذا الشهر)\n───────────────\nالإجمالي: {grand_total:,.0f} جنيه\n"]
+        for cat, total in rows:
+            lines.append(f"• {cat or 'بدون فئة'}: {float(total):,.0f} جنيه")
+        if not rows:
+            lines.append("لا توجد مصروفات هذا الشهر")
+        return "\n".join(lines)
+
+    elif report_type == "profit_loss":
+        first_of_month = date.today().replace(day=1).isoformat()
+        revenue = db.execute(text("SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices WHERE DATE(created_at) >= :start"), {"start": first_of_month}).scalar() or 0
+        cogs = db.execute(text("""
+            SELECT COALESCE(SUM(si.quantity * p.cost_price), 0)
+            FROM sale_items si
+            JOIN products p ON p.id = si.product_id
+            JOIN sales_invoices inv ON inv.id = si.invoice_id
+            WHERE DATE(inv.created_at) >= :start
+        """), {"start": first_of_month}).scalar() or 0
+        expenses = db.execute(text("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE DATE(expense_date) >= :start"), {"start": first_of_month}).scalar() or 0
+        gross = float(revenue) - float(cogs)
+        net = gross - float(expenses)
+        return (
+            f"\U0001f4ca تقرير الأرباح والخسائر (هذا الشهر)\n"
+            f"───────────────\n"
+            f"\U0001f4b0 الإيرادات: {float(revenue):,.0f} جنيه\n"
+            f"\U0001f4e6 تكلفة البضاعة: {float(cogs):,.0f} جنيه\n"
+            f"\U0001f4c8 مجمل الربح: {gross:,.0f} جنيه\n"
+            f"\U0001f4c9 المصروفات: {float(expenses):,.0f} جنيه\n"
+            f"───────────────\n"
+            f"{'✅' if net >= 0 else '❌'} صافي الربح: {net:,.0f} جنيه"
+        )
+
+    elif report_type == "stock_movement":
+        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        sold = db.execute(text("SELECT COALESCE(SUM(quantity), 0) FROM sale_items si JOIN sales_invoices inv ON inv.id = si.invoice_id WHERE DATE(inv.created_at) >= :start"), {"start": week_ago}).scalar() or 0
+        purchased = db.execute(text("SELECT COALESCE(SUM(quantity), 0) FROM purchase_items pi JOIN purchase_invoices inv ON inv.id = pi.invoice_id WHERE DATE(inv.created_at) >= :start"), {"start": week_ago}).scalar() or 0
+        return (
+            f"\U0001f504 حركة المخزون (آخر 7 أيام)\n"
+            f"───────────────\n"
+            f"\U0001f4e4 وارد (مشتريات): {int(purchased)} قطعة\n"
+            f"\U0001f4e5 صادر (مبيعات): {int(sold)} قطعة\n"
+            f"───────────────\n"
+            f"\U0001f4ca صافي الحركة: {int(purchased) - int(sold):+d} قطعة"
+        )
+
+    elif report_type == "dead_stock":
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        rows = db.execute(text("""
+            SELECT p.name, p.quantity, p.cost_price * p.quantity as value
+            FROM products p
+            WHERE p.quantity > 0
+              AND p.id NOT IN (
+                  SELECT DISTINCT si.product_id FROM sale_items si
+                  JOIN sales_invoices inv ON inv.id = si.invoice_id
+                  WHERE DATE(inv.created_at) >= :cutoff
+              )
+            ORDER BY (p.cost_price * p.quantity) DESC
+            LIMIT 10
+        """), {"cutoff": cutoff}).fetchall()
+        total_value = sum(float(v) for _, _, v in rows)
+        lines = [f"\U0001f6ab مخزون راكد (لم يُباع منذ 30 يوم)\n───────────────\nقيمة الراكد: {total_value:,.0f} جنيه\n"]
+        for name, qty, val in rows:
+            lines.append(f"• {name}: {int(qty)} قطعة ({float(val):,.0f} جنيه)")
+        if not rows:
+            lines.append("✅ لا يوجد مخزون راكد")
+        return "\n".join(lines)
+
+    return None
 
 
 @router.post("/send-invoice/{invoice_id}")
