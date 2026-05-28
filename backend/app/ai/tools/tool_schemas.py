@@ -4,7 +4,7 @@ Execution is handled separately by ToolExecutor.
 """
 
 TOOL_SCHEMAS = [
-    # ─── Read: Sales ──────────────────────────────────────────────────────
+    # ─── Read: Sales ─────────────────────────────────────────────────────────────
     {
         "name": "get_today_sales",
         "description": "Get today's sales summary including invoice count, total amount, and cash collected",
@@ -30,7 +30,7 @@ TOOL_SCHEMAS = [
         "description": "Get list of unpaid or partially paid invoices",
         "input_schema": {"type": "object", "properties": {"customer_id": {"type": "integer", "description": "Optional filter by customer"}}, "required": []},
     },
-    # ─── Read: Inventory ───────────────────────────────────────────────────
+    # ─── Read: Inventory ───────────────────────────────────────────────────────────
     {
         "name": "get_stock_level",
         "description": "Get current stock level for a product across warehouses",
@@ -61,7 +61,7 @@ TOOL_SCHEMAS = [
         "description": "Get inventory valuation by warehouse",
         "input_schema": {"type": "object", "properties": {"warehouse_id": {"type": "integer"}}, "required": []},
     },
-    # ─── Read: Finance ─────────────────────────────────────────────────────
+    # ─── Read: Finance ─────────────────────────────────────────────────────────────
     {
         "name": "get_profit_and_loss",
         "description": "Get profit and loss report for a date range",
@@ -97,7 +97,7 @@ TOOL_SCHEMAS = [
         "description": "Predict demand and days until stockout for a product",
         "input_schema": {"type": "object", "properties": {"product_id": {"type": "integer"}, "days_back": {"type": "integer", "default": 30}}, "required": ["product_id"]},
     },
-    # ─── Read: Search ───────────────────────────────────────────────────────
+    # ─── Read: Search ───────────────────────────────────────────────────────────────
     {
         "name": "search_products",
         "description": "Search products by name",
@@ -108,7 +108,7 @@ TOOL_SCHEMAS = [
         "description": "Search customers by name",
         "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
     },
-    # ─── Write: Sales ──────────────────────────────────────────────────────
+    # ─── Write: Sales ──────────────────────────────────────────────────────────────
     {
         "name": "create_invoice",
         "description": "Create a new sales invoice. Validates stock, deducts inventory, creates ledger entries, records payment.",
@@ -164,7 +164,7 @@ TOOL_SCHEMAS = [
             "required": ["invoice_id", "discount_amount"],
         },
     },
-    # ─── Write: Payments ───────────────────────────────────────────────────
+    # ─── Write: Payments ───────────────────────────────────────────────────────────
     {
         "name": "record_payment",
         "description": "Record a customer payment against an invoice.",
@@ -192,7 +192,7 @@ TOOL_SCHEMAS = [
             "required": ["invoice_id", "amount"],
         },
     },
-    # ─── Write: Inventory ───────────────────────────────────────────────────
+    # ─── Write: Inventory ───────────────────────────────────────────────────────────
     {
         "name": "update_stock",
         "description": "Add stock (receive goods) for a product in a warehouse.",
@@ -237,7 +237,7 @@ TOOL_SCHEMAS = [
             "required": ["product_id", "warehouse_id", "new_quantity"],
         },
     },
-    # ─── Write: CRM ────────────────────────────────────────────────────────
+    # ─── Write: CRM ────────────────────────────────────────────────────────────────
     {
         "name": "create_customer",
         "description": "Create a new customer record.",
@@ -864,5 +864,34 @@ TOOL_SCHEMAS = [
         "name": "get_trial_balance",
         "description": "Get the full trial balance showing all accounts with their debit/credit totals. Verifies if books are balanced.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # ═══ WHATSAPP TOOLS ═══
+    {
+        "name": "send_whatsapp_message",
+        "description": "Send a WhatsApp message to a phone number. Use for individual notifications or one-off communications.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone number in international format (e.g., 201234567890)"},
+                "message": {"type": "string", "description": "Message text to send"},
+            },
+            "required": ["to", "message"],
+        },
+    },
+    {
+        "name": "send_overdue_reminders",
+        "description": "Send bulk WhatsApp reminders to all customers with overdue payments (older than 7 days). REQUIRES CONFIRMATION as this is a bulk operation.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "send_daily_sales_report",
+        "description": "Send today's sales summary report via WhatsApp to a specified phone number. Includes invoice count, revenue, cash collected, expenses, and net profit.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone number in international format (e.g., 201234567890)"},
+            },
+            "required": ["to"],
+        },
     },
 ]
