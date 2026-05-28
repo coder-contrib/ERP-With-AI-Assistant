@@ -35,8 +35,8 @@ class WhatsAppRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> sendInvoice({required int invoiceId, required String to}) async {
-    final response = await _dio.post('/whatsapp/send-invoice/$invoiceId', data: {'to': to});
+  Future<Map<String, dynamic>> sendInvoice(int invoiceId) async {
+    final response = await _dio.post('/whatsapp/send-invoice/$invoiceId');
     return response.data as Map<String, dynamic>;
   }
 }
