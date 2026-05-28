@@ -10,8 +10,6 @@ class ReportsRepository {
   final Dio _dio;
   ReportsRepository(this._dio);
 
-  // === EXISTING ===
-
   Future<Map<String, dynamic>> getDailySales({String? startDate, String? endDate}) async {
     final params = <String, dynamic>{};
     if (startDate != null) params['start_date'] = startDate;
@@ -65,8 +63,6 @@ class ReportsRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // === NEW: SALES REPORTS ===
-
   Future<Map<String, dynamic>> getSalesByPeriod({String period = 'day', String? startDate, String? endDate}) async {
     final params = <String, dynamic>{'period': period};
     if (startDate != null) params['start_date'] = startDate;
@@ -93,8 +89,6 @@ class ReportsRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // === NEW: INVENTORY REPORTS ===
-
   Future<Map<String, dynamic>> getLowStock({int threshold = 10}) async {
     final response = await _dio.get('/reports/low-stock', queryParameters: {'threshold': threshold});
     return response.data as Map<String, dynamic>;
@@ -113,8 +107,6 @@ class ReportsRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // === NEW: FINANCE REPORTS ===
-
   Future<Map<String, dynamic>> getProfitLoss({String? startDate, String? endDate}) async {
     final params = <String, dynamic>{};
     if (startDate != null) params['start_date'] = startDate;
@@ -131,8 +123,6 @@ class ReportsRepository {
     return response.data as Map<String, dynamic>;
   }
 
-  // === NEW: CUSTOMER REPORTS ===
-
   Future<Map<String, dynamic>> getCustomerProfile(int customerId) async {
     final response = await _dio.get('/reports/customer-profile/$customerId');
     return response.data as Map<String, dynamic>;
@@ -145,6 +135,16 @@ class ReportsRepository {
 
   Future<Map<String, dynamic>> getCustomerSegmentation() async {
     final response = await _dio.get('/reports/customer-segmentation');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getAiRiskAssessment() async {
+    final response = await _dio.get('/reports/ai-risk-assessment');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getAiDailySummary() async {
+    final response = await _dio.get('/reports/ai-daily-summary');
     return response.data as Map<String, dynamic>;
   }
 }
