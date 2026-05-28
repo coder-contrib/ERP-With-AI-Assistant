@@ -152,7 +152,21 @@ async def voice_chat_text(
 async def voice_websocket_endpoint(
     websocket: WebSocket,
     session_id: str,
+    token: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    """WebSocket endpoint for realtime voice interactions."""
-    await handle_voice_websocket(websocket, session_id, db)
+    """WebSocket endpoint for realtime voice interactions.
+    Pass JWT token as ?token=<jwt> query param for authenticated access.
+    Without a valid token, falls back to ai_agent (read-only).
+    """
+    user_role = "ai_agent"
+    if token:
+        from app.core.security import decode_access_token
+        payload = decode_access_token(token)
+        if payload:
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.user_id == int(user_id)).first()
+                if user and user.active_status:
+                    user_role = user.role
+    await handle_voice_websocket(websocket, session_id, db, user_role=user_role)

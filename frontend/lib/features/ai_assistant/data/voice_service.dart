@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../core/network/api_client.dart';
 
@@ -63,6 +64,7 @@ class VoiceService {
   final Dio _dio;
   WebSocketChannel? _wsChannel;
   final StreamController<Map<String, dynamic>> _eventController = StreamController.broadcast();
+  static const _storage = FlutterSecureStorage();
 
   VoiceService(this._dio);
 
@@ -123,9 +125,11 @@ class VoiceService {
     return Uint8List.fromList(response.data);
   }
 
-  void connectWebSocket(String sessionId) {
+  Future<void> connectWebSocket(String sessionId) async {
+    final token = await _storage.read(key: 'access_token');
     final baseUrl = _dio.options.baseUrl.replaceFirst('http', 'ws');
-    _wsChannel = WebSocketChannel.connect(Uri.parse('$baseUrl/ai/voice/ws/$sessionId'));
+    final tokenParam = token != null ? '?token=$token' : '';
+    _wsChannel = WebSocketChannel.connect(Uri.parse('$baseUrl/ai/voice/ws/$sessionId$tokenParam'));
     _wsChannel!.stream.listen(
       (data) {
         if (data is String) {

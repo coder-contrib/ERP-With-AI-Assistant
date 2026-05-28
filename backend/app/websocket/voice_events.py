@@ -23,7 +23,7 @@ class SessionState:
         return self.version
 
 
-async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session):
+async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session, user_role: str = "ai_agent"):
     """Handle realtime voice WebSocket connection with live streaming and barge-in.
 
     Protocol:
@@ -49,7 +49,7 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
     """
     await websocket.accept()
     voice_service = VoiceService()
-    orchestrator = VoiceOrchestrator(db)
+    orchestrator = VoiceOrchestrator(db, user_role=user_role)
     streamer = None
     stream_task = None
     ai_processing_task = None
@@ -143,13 +143,13 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
 
             msg_type = message.get("type")
 
-            # ─── Barge-In: Interrupt AI ──────────────────────────────
+            # ─── Barge-In: Interrupt AI ────────────────────────────
             if msg_type == "barge_in":
                 await cancel_all_active_tasks()
                 was_interrupted = True
                 await _send(websocket, "barge_in_ack", {})
 
-            # ─── Live Streaming Mode ─────────────────────────────────
+            # ─── Live Streaming Mode ─────────────────────────────
             elif msg_type == "stream_start":
                 # Cancel any ongoing processing (also handles implicit barge-in)
                 await cancel_all_active_tasks()
@@ -206,7 +206,7 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
                 )
                 was_interrupted = False
 
-            # ─── Batch Mode (full recording) ────────────────────────
+            # ─── Batch Mode (full recording) ────────────────────
             elif msg_type == "audio":
                 audio_b64 = message.get("data", "")
                 try:
@@ -230,7 +230,7 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
                     process_and_respond(text, current_version)
                 )
 
-            # ─── Text Mode ───────────────────────────────────────
+            # ─── Text Mode ───────────────────────────────────
             elif msg_type == "text":
                 data = message.get("data", {})
                 text = data.get("message", "").strip()

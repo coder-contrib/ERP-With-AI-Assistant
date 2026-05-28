@@ -104,7 +104,7 @@ class VoiceChatNotifier extends StateNotifier<VoiceChatState> {
   /// Start live streaming mode: audio is streamed in real-time for transcription
   Future<void> startStreaming() async {
     if (!state.isConnected) {
-      _voiceService.connectWebSocket(state.sessionId);
+      await _voiceService.connectWebSocket(state.sessionId);
       _eventSub = _voiceService.events.listen(_handleEvent);
     }
 
