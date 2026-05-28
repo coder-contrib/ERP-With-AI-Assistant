@@ -73,6 +73,8 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
       builder: (_) => const OpeningStockDialog(),
     );
     if (result == true) {
+      final repo = ref.read(inventoryRepositoryProvider);
+      await repo.refreshCache();
       invalidateAfterInventoryChange(ref);
     }
   }
@@ -539,6 +541,7 @@ class _TransferDialogState extends State<_TransferDialog> {
                 quantity: double.parse(_qtyController.text),
                 unitType: widget.item.baseUnit,
               );
+              await repo.refreshCache();
               invalidateAfterInventoryChange(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
@@ -631,6 +634,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
                 unitType: widget.item.baseUnit,
                 reason: _reasonController.text.isEmpty ? null : _reasonController.text,
               );
+              await repo.refreshCache();
               invalidateAfterInventoryChange(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
@@ -732,6 +736,7 @@ class _AddStockDialogState extends State<_AddStockDialog> {
                 costPerUnit: double.tryParse(_costController.text) ?? 0,
                 reason: _notesController.text.isEmpty ? null : _notesController.text,
               );
+              await repo.refreshCache();
               invalidateAfterInventoryChange(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
@@ -838,6 +843,7 @@ class _DeductStockDialogState extends State<_DeductStockDialog> {
                 unitType: widget.item.baseUnit,
                 reason: _reasonController.text,
               );
+              await repo.refreshCache();
               invalidateAfterInventoryChange(widget.ref);
               if (mounted) {
                 Navigator.pop(context);
@@ -899,7 +905,7 @@ class _StockHistoryDialogState extends State<_StockHistoryDialog> {
       case 'purchase': return Icons.add_shopping_cart;
       case 'opening_stock': return Icons.inventory_2;
       case 'waste': return Icons.delete_outline;
-      case 'transfer': return Icons.swap_horiz;
+      case 'warehouse_transfer': return Icons.swap_horiz;
       case 'sales_return': return Icons.assignment_return;
       case 'purchase_return': return Icons.assignment_return_outlined;
       default: return Icons.receipt_long;
