@@ -147,4 +147,11 @@ class ReportsRepository {
     final response = await _dio.get('/reports/ai-daily-summary');
     return response.data as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> getDailyOperations({String? reportDate}) async {
+    final params = <String, dynamic>{};
+    if (reportDate != null) params['report_date'] = reportDate;
+    final response = await _dio.get('/reports/daily-operations', queryParameters: params);
+    return response.data as Map<String, dynamic>;
+  }
 }
