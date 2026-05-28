@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     ai_can_adjust_stock: bool = True
     ai_can_create_customers: bool = True
 
+    # WhatsApp Integration (Meta Cloud API)
+    whatsapp_api_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_can_send: bool = False
+    whatsapp_can_bulk_message: bool = False
+    whatsapp_max_messages_per_request: int = 50
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
