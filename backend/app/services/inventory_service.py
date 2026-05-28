@@ -4,7 +4,7 @@ from app.database import transaction
 from app.repositories.inventory_repo import InventoryRepository
 from app.services.cache_service import CacheService
 from app.core.redis import get_redis
-from app.models.inventory import InventoryCache
+from app.models.inventory import InventoryCache, InventoryTransaction
 
 
 class InventoryService:
@@ -29,6 +29,9 @@ class InventoryService:
 
     def get_product_stock(self, product_id: int) -> list[InventoryCache]:
         return self.repo.get_product_stock(product_id)
+
+    def get_product_transactions(self, product_id: int, limit: int = 50) -> list[InventoryTransaction]:
+        return self.repo.get_transactions(product_id, limit)
 
     def get_available_quantity(self, product_id: int, warehouse_id: int) -> Decimal:
         cached = self.cache.get_stock(product_id, warehouse_id)
