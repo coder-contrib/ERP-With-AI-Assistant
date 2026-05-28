@@ -339,6 +339,10 @@ class ToolExecutor:
             "send_daily_sales_report": lambda **p: whatsapp.send_daily_sales_report(
                 to=p["to"],
             ),
+            "send_report_to_owner": lambda **p: whatsapp.send_report_to_owner(
+                report_type=p.get("report_type", "daily_operations"),
+            ),
+            "get_daily_operations_report": lambda **_: whatsapp.get_daily_operations_report(),
             # --- Workflow: Composite Tools ---
             "create_invoice_and_notify": lambda **p: workflows.create_invoice_and_notify(
                 customer_id=p["customer_id"],
