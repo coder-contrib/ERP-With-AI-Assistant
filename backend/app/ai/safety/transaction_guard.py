@@ -36,6 +36,8 @@ SENSITIVE_OPERATIONS = {
     "reset_user_password",
     "refresh_daily_summary",
     "refresh_summary_range",
+    # WhatsApp sensitive operations
+    "send_overdue_reminders",
 }
 
 CONFIRMATION_THRESHOLDS = {
@@ -60,6 +62,8 @@ CONFIRMATION_THRESHOLDS = {
     "delete_category": lambda params: True,
     "refresh_daily_summary": lambda params: False,
     "refresh_summary_range": lambda params: False,
+    # WhatsApp thresholds (bulk messages always require confirmation)
+    "send_overdue_reminders": lambda params: True,
 }
 
 PENDING_KEY_PREFIX = "ai:pending_tx:"
@@ -121,6 +125,8 @@ class TransactionGuard:
             preview["user_id"] = params.get("user_id", 0)
         elif tool_name == "delete_category":
             preview["category_id"] = params.get("category_id", 0)
+        elif tool_name == "send_overdue_reminders":
+            preview["action"] = "bulk WhatsApp reminders to overdue customers"
 
         return preview
 
@@ -195,6 +201,8 @@ class TransactionGuard:
             "reset_user_password": lambda p: f"إعادة تعيين كلمة مرور المستخدم #{p.get('user_id')}",
             "refresh_daily_summary": lambda p: f"تحديث الملخص المالي ليوم {p.get('target_date', 'اليوم')}",
             "refresh_summary_range": lambda p: f"تحديث الملخص المالي من {p.get('start_date')} إلى {p.get('end_date', 'اليوم')}",
+            # WhatsApp descriptions
+            "send_overdue_reminders": lambda p: "إرسال تذكيرات جماعية عبر واتساب للعملاء المتأخرين في السداد",
         }
         fn = descriptions.get(tool_name)
         return fn(params) if fn else f"تنفيذ {tool_name}"
