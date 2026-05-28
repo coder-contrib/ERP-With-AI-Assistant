@@ -869,8 +869,9 @@ class _StockHistoryDialog extends StatefulWidget {
 }
 
 class _StockHistoryDialogState extends State<_StockHistoryDialog> {
-  String? _history;
+  List<Map<String, dynamic>>? _transactions;
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -881,10 +882,27 @@ class _StockHistoryDialogState extends State<_StockHistoryDialog> {
   Future<void> _loadHistory() async {
     try {
       final repo = widget.ref.read(inventoryRepositoryProvider);
-      final result = await repo.getStockHistory(widget.item.productId, widget.item.productName);
-      if (mounted) setState(() { _history = result; _loading = false; });
+      final result = await repo.getStockHistory(widget.item.productId);
+      if (mounted) setState(() { _transactions = result; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _history = 'Error loading history: $e'; _loading = false; });
+      if (mounted) setState(() { _error = 'Error loading history: $e'; _loading = false; });
+    }
+  }
+
+  Color _directionColor(String direction) {
+    return direction.toUpperCase() == 'IN' ? AppColors.success : AppColors.error;
+  }
+
+  IconData _typeIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'sale': return Icons.shopping_cart;
+      case 'purchase': return Icons.add_shopping_cart;
+      case 'opening_stock': return Icons.inventory_2;
+      case 'waste': return Icons.delete_outline;
+      case 'transfer': return Icons.swap_horiz;
+      case 'sales_return': return Icons.assignment_return;
+      case 'purchase_return': return Icons.assignment_return_outlined;
+      default: return Icons.receipt_long;
     }
   }
 
@@ -899,20 +917,83 @@ class _StockHistoryDialogState extends State<_StockHistoryDialog> {
         ],
       ),
       content: SizedBox(
-        width: 500,
-        height: 400,
+        width: 550,
+        height: 420,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.03),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(_history ?? 'No history available', style: const TextStyle(fontSize: 13, height: 1.6)),
-                ),
-              ),
+            : _error != null
+                ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.error)))
+                : _transactions == null || _transactions!.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.history, size: 48, color: AppColors.textSecondary),
+                            SizedBox(height: 12),
+                            Text('No transaction history', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                            SizedBox(height: 4),
+                            Text('Transactions will appear here once recorded', style: TextStyle(color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: _transactions!.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final tx = _transactions![i];
+                          final type = tx['transaction_type']?.toString() ?? '';
+                          final direction = tx['direction']?.toString() ?? '';
+                          final quantity = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0;
+                          final unitType = tx['unit_type']?.toString() ?? '';
+                          final costPerUnit = double.tryParse(tx['cost_per_unit']?.toString() ?? '0') ?? 0;
+                          final notes = tx['notes']?.toString() ?? '';
+                          final createdDate = tx['created_date']?.toString() ?? '';
+                          final displayDate = createdDate.length > 16 ? createdDate.substring(0, 16).replaceFirst('T', ' ') : createdDate;
+
+                          return ListTile(
+                            leading: Icon(_typeIcon(type), color: _directionColor(direction)),
+                            title: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: _directionColor(direction).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    direction.toUpperCase(),
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _directionColor(direction)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(type.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                const Spacer(),
+                                Text('${quantity.toStringAsFixed(2)} $unitType', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(displayDate, style: const TextStyle(fontSize: 11)),
+                                    if (costPerUnit > 0) ...[
+                                      const Spacer(),
+                                      Text('@ \$${costPerUnit.toStringAsFixed(2)}/unit', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                    ],
+                                  ],
+                                ),
+                                if (notes.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(notes, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                              ],
+                            ),
+                            dense: true,
+                          );
+                        },
+                      ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
