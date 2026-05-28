@@ -18,6 +18,15 @@ class InventoryRepository:
             InventoryCache.product_id == product_id
         ).all()
 
+    def get_transactions(self, product_id: int, limit: int = 50) -> list[InventoryTransaction]:
+        return (
+            self.db.query(InventoryTransaction)
+            .filter(InventoryTransaction.product_id == product_id)
+            .order_by(InventoryTransaction.created_date.desc())
+            .limit(limit)
+            .all()
+        )
+
     def create_transaction(self, **kwargs) -> InventoryTransaction:
         txn = InventoryTransaction(**kwargs)
         self.db.add(txn)
