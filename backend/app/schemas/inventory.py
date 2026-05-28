@@ -26,3 +26,21 @@ class InventoryTransactionCreate(BaseModel):
     reference_type: str | None = None
     reference_id: int | None = None
     notes: str | None = None
+
+
+class InventoryTransactionResponse(BaseModel):
+    transaction_id: int
+    product_id: int
+    warehouse_id: int
+    transaction_type: str
+    direction: str
+    quantity: Decimal
+    unit_type: str
+    cost_per_unit: Decimal
+    reference_type: str | None = None
+    reference_id: int | None = None
+    notes: str | None = None
+    created_date: datetime | None = None
+
+    class Config:
+        from_attributes = True
