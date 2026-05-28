@@ -5,6 +5,7 @@ import '../../features/expenses/presentation/expenses_provider.dart';
 import '../../features/products/presentation/products_provider.dart';
 import '../../features/purchases/presentation/purchases_provider.dart';
 import '../../features/inventory/presentation/inventory_provider.dart';
+import '../../features/inventory/data/inventory_repository.dart';
 import '../../features/customers/presentation/customers_provider.dart';
 import '../../features/suppliers/presentation/suppliers_provider.dart';
 import '../../features/reports/presentation/reports_provider.dart';
@@ -50,6 +51,12 @@ void invalidateAfterInventoryChange(WidgetRef ref) {
   ref.invalidate(inventoryDataProvider);
   invalidateDashboard(ref);
   ref.invalidate(reportsInventoryProvider);
+}
+
+Future<void> refreshInventory(WidgetRef ref) async {
+  final repo = ref.read(inventoryRepositoryProvider);
+  await repo.refreshCache();
+  invalidateAfterInventoryChange(ref);
 }
 
 void invalidateAfterProductChange(WidgetRef ref) {
