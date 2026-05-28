@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from app.database import get_db
 from app.core.deps import require_permission
@@ -95,14 +96,12 @@ def send_daily_report(
 @router.post("/send-invoice/{invoice_id}")
 def send_invoice_via_whatsapp(
     invoice_id: int,
-    to: str = Body(..., embed=True),
     current_user: User = Depends(require_permission("sales:write")),
     db: Session = Depends(get_db),
 ):
-    from sqlalchemy import text
-
     query = text("""
-        SELECT si.id, si.total_amount, si.paid_amount, si.payment_status, c.name
+        SELECT si.id, si.total_amount, si.paid_amount, si.payment_status, 
+               c.name, c.phone
         FROM sales_invoices si
         LEFT JOIN customers c ON c.id = si.customer_id
         WHERE si.id = :invoice_id
@@ -111,7 +110,11 @@ def send_invoice_via_whatsapp(
     if not row:
         return {"error": "Invoice not found"}
 
-    inv_id, total, paid, status, customer_name = row
+    inv_id, total, paid, status, customer_name, customer_phone = row
+
+    if not customer_phone:
+        return {"error": "Customer does not have a phone number on file. Update the customer record first."}
+
     remaining = float(total) - float(paid)
 
     msg = (
@@ -125,6 +128,7 @@ def send_invoice_via_whatsapp(
     msg += f"الحالة: {status}\nشكراً لتعاملكم معنا."
 
     tools = WhatsAppTools(db)
-    result = tools.send_whatsapp_message(to, msg)
+    result = tools.send_whatsapp_message(customer_phone, msg)
     result["invoice_id"] = inv_id
+    result["sent_to_customer"] = customer_name
     return result
