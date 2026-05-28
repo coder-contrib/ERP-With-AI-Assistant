@@ -59,6 +59,7 @@ class AppShell extends ConsumerWidget {
                       _navItem(context, ref, '/opening-balances', Icons.account_balance_wallet_rounded, 'Opening Balances', collapsed),
                       _navItem(context, ref, '/reports', Icons.bar_chart_rounded, 'Reports', collapsed),
                       _navItem(context, ref, '/notifications', Icons.notifications_rounded, 'Notifications', collapsed),
+                      _navItem(context, ref, '/whatsapp', Icons.chat, 'WhatsApp', collapsed, highlight: true),
                       const Divider(height: 24),
                       _navItem(context, ref, '/voice-ai', Icons.record_voice_over_rounded, 'Voice AI', collapsed, highlight: true),
                       _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Chat', collapsed),
