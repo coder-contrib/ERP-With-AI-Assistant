@@ -5,6 +5,7 @@ import '../../../core/utils/app_refresh.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../customers/data/customers_repository.dart';
+import '../../whatsapp/data/whatsapp_repository.dart';
 import '../data/sales_repository.dart';
 import 'sales_provider.dart';
 import 'create_sale_dialog.dart';
@@ -236,6 +237,7 @@ class _SalesPageState extends ConsumerState<SalesPage> {
               onTap: () => setState(() => _selectedInvoice = inv),
               onRecordPayment: () => _recordPayment(inv),
               onAskAi: () => _askAiAboutInvoice(inv, customerName),
+              onSendWhatsApp: () => _sendWhatsApp(inv),
             );
           },
         );
@@ -332,6 +334,44 @@ class _SalesPageState extends ConsumerState<SalesPage> {
     );
   }
 
+  void _sendWhatsApp(SalesInvoiceModel invoice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.chat, color: const Color(0xFF25D366)),
+            const SizedBox(width: 8),
+            const Text('Send via WhatsApp'),
+          ],
+        ),
+        content: Text('Send invoice ${invoice.invoiceNumber} details to the customer via WhatsApp?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Send', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final repo = ref.read(whatsappRepositoryProvider);
+      await repo.sendInvoice(invoice.invoiceId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invoice sent via WhatsApp'), backgroundColor: Color(0xFF25D366)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('WhatsApp error: $e')));
+      }
+    }
+  }
+
   void _askAiAboutInvoice(SalesInvoiceModel invoice, String customerName) {
     showDialog(
       context: context,
@@ -423,6 +463,7 @@ class _InvoiceCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRecordPayment;
   final VoidCallback onAskAi;
+  final VoidCallback onSendWhatsApp;
 
   const _InvoiceCard({
     required this.invoice,
@@ -432,6 +473,7 @@ class _InvoiceCard extends StatelessWidget {
     required this.onTap,
     required this.onRecordPayment,
     required this.onAskAi,
+    required this.onSendWhatsApp,
   });
 
   @override
@@ -528,6 +570,8 @@ class _InvoiceCard extends StatelessWidget {
                 if (!invoice.isPaid) _ActionBtn(icon: Icons.payment, label: 'Pay', onTap: onRecordPayment),
                 if (!invoice.isPaid) const SizedBox(width: 8),
                 _ActionBtn(icon: Icons.smart_toy_outlined, label: 'AI', onTap: onAskAi),
+                const SizedBox(width: 8),
+                _ActionBtn(icon: Icons.chat, label: 'WhatsApp', onTap: onSendWhatsApp, color: const Color(0xFF25D366)),
               ],
             ),
           ],
@@ -550,23 +594,25 @@ class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color? color;
 
-  const _ActionBtn({required this.icon, required this.label, required this.onTap});
+  const _ActionBtn({required this.icon, required this.label, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final btnColor = color ?? AppColors.primary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.withOpacity(0.3))),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: btnColor.withOpacity(0.4))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: AppColors.primary),
+            Icon(icon, size: 14, color: btnColor),
             const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: btnColor)),
           ],
         ),
       ),
