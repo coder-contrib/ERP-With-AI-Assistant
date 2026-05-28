@@ -478,6 +478,7 @@ class _SettingsTab extends ConsumerStatefulWidget {
 class _SettingsTabState extends ConsumerState<_SettingsTab> {
   final _tokenController = TextEditingController();
   final _phoneIdController = TextEditingController();
+  final _ownerPhoneController = TextEditingController();
   bool _canSend = false;
   bool _canBulk = false;
   bool _saving = false;
@@ -487,6 +488,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
   void dispose() {
     _tokenController.dispose();
     _phoneIdController.dispose();
+    _ownerPhoneController.dispose();
     super.dispose();
   }
 
@@ -500,12 +502,14 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
       };
       if (_tokenController.text.isNotEmpty) data['whatsapp_api_token'] = _tokenController.text.trim();
       if (_phoneIdController.text.isNotEmpty) data['whatsapp_phone_number_id'] = _phoneIdController.text.trim();
+      if (_ownerPhoneController.text.isNotEmpty) data['whatsapp_owner_phone'] = _ownerPhoneController.text.trim();
 
       await repo.updateSettings(data);
       ref.invalidate(whatsappSettingsProvider);
       setState(() { _saving = false; _status = 'Settings saved successfully!'; });
       _tokenController.clear();
       _phoneIdController.clear();
+      _ownerPhoneController.clear();
     } catch (e) {
       setState(() { _saving = false; _status = 'Error: $e'; });
     }
@@ -563,7 +567,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                               Text(
                                 'Sending: ${settings['can_send'] == true ? "Enabled" : "Disabled"} | '
                                 'Bulk: ${settings['can_bulk_message'] == true ? "Enabled" : "Disabled"} | '
-                                'Max/request: ${settings['max_messages_per_request'] ?? 50}',
+                                'Owner: ${settings['owner_phone']?.toString().isNotEmpty == true ? settings['owner_phone'] : "Not set"}',
                                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                               ),
                             ],
@@ -601,11 +605,23 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                         TextField(
                           controller: _phoneIdController,
                           decoration: InputDecoration(
-                            labelText: 'Phone Number ID',
-                            hintText: settings['phone_number_id']?.toString().isNotEmpty == true ? 'Current: ${settings['phone_number_id']}' : 'Enter Phone Number ID',
+                            labelText: 'Phone Number ID (for sending)',
+                            hintText: settings['phone_number_id']?.toString().isNotEmpty == true ? 'Current: ${settings['phone_number_id']}' : 'Enter Phone Number ID from Meta',
                             prefixIcon: const Icon(Icons.phone_android),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _ownerPhoneController,
+                          decoration: InputDecoration(
+                            labelText: 'Owner Phone Number (for receiving reports)',
+                            hintText: settings['owner_phone']?.toString().isNotEmpty == true ? 'Current: ${settings['owner_phone']}' : '201XXXXXXXXX (your WhatsApp number)',
+                            prefixIcon: const Icon(Icons.person),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            helperText: 'Reports from the Reports page will be sent to this number',
+                          ),
+                          keyboardType: TextInputType.phone,
                         ),
                         const SizedBox(height: 20),
                         SwitchListTile(
