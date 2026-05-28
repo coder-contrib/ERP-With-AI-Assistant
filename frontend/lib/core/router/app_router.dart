@@ -18,6 +18,7 @@ import '../../features/ai_assistant/presentation/ai_assistant_page.dart';
 import '../../features/ai_assistant/presentation/voice_chat_page.dart';
 import '../../features/ai_audit/presentation/ai_audit_page.dart';
 import '../../features/ai_audit/presentation/ai_analytics_page.dart';
+import '../../features/whatsapp/presentation/whatsapp_page.dart';
 import '../../shared/layouts/app_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -49,6 +50,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/opening-balances', builder: (_, __) => const OpeningBalancesPage()),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsPage()),
           GoRoute(path: '/notifications', builder: (_, __) => const NotificationsPage()),
+          GoRoute(path: '/whatsapp', builder: (_, __) => const WhatsAppPage()),
           GoRoute(path: '/ai', builder: (_, __) => const AIAssistantPage()),
           GoRoute(path: '/voice-ai', builder: (_, __) => const VoiceChatPage()),
           GoRoute(path: '/ai-audit', builder: (_, __) => const AIAuditPage()),
