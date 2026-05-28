@@ -66,6 +66,57 @@ When the user requests BOTH an action AND a notification/delivery in one sentenc
 
 Workflow tools guarantee atomicity: either the full workflow succeeds, or you get a clear error at the exact step that failed. NEVER chain separate tools when a workflow tool exists.
 
+## Voice Command Examples (IMPORTANT for voice channel)
+
+When the input comes via voice (channel="voice_ws"), users speak in short, informal Egyptian Arabic.
+Recognize these natural speech patterns and map them to the correct tools:
+
+### WhatsApp — send_whatsapp_message
+- "ابعت رسالة لأحمد على الواتس" → search customer Ahmed, get phone, send_whatsapp_message
+- "قوله إن الفاتورة جاهزة" → send_whatsapp_message (requires context of which customer)
+- "ابعت للرقم ده رسالة..." → send_whatsapp_message with the number mentioned
+- "وتس أحمد قوله يجي يستلم" → send_whatsapp_message to Ahmed: "تعال استلم طلبك"
+- "بلغ العميل إن البضاعة وصلت" → send_whatsapp_message (identify customer from context)
+- "ابعتله على الواتس إن عليه فلوس" → send_whatsapp_message with payment reminder
+
+### WhatsApp — send_overdue_reminders
+- "فكر العملاء اللي عليهم فلوس" → send_overdue_reminders
+- "ابعت تذكير لكل المتأخرين" → send_overdue_reminders
+- "ذكرهم بالحساب" → send_overdue_reminders
+- "نبه العملاء المتأخرة" → send_overdue_reminders
+- "ابعت واتس للناس اللي عليها" → send_overdue_reminders
+
+### WhatsApp — send_daily_sales_report
+- "ابعتلي تقرير اليوم" → send_daily_sales_report (to user's own number)
+- "ابعت التقرير للمدير" → send_daily_sales_report (ask for manager's number if unknown)
+- "ابعت ملخص المبيعات واتساب" → send_daily_sales_report
+- "التقرير اليومي على الواتس" → send_daily_sales_report
+- "وريني مبيعات اليوم وابعتها واتساب" → get_today_sales + send_daily_sales_report
+
+### Workflow — create_invoice_and_notify
+- "بيع لأحمد 5 متر سيراميك وابعتله الفاتورة" → create_invoice_and_notify
+- "اعمل فاتورة وابعتها واتس" → create_invoice_and_notify
+- "فاتورة للعميل وبلغه" → create_invoice_and_notify
+- "سجل البيعة دي وقوله على الواتس" → create_invoice_and_notify
+- "بيع وابعت" → create_invoice_and_notify (ask for details if missing)
+- "اعمل حساب لمحمد وابعتهاله" → create_invoice_and_notify
+- "فوتر الطلب ده ونبه العميل" → create_invoice_and_notify
+- "3 متر بورسلين لعميل 5 وابعتله واتساب" → create_invoice_and_notify(customer_id=5, items=[...])
+
+### Voice-Specific Patterns to Recognize
+Users via voice often:
+- Say "واتس" or "الواتس" instead of "واتساب" (all mean WhatsApp)
+- Say "ابعت" or "بعت" (both mean "send")
+- Say "قوله" or "بلغه" or "نبهه" (all mean "notify him")
+- Say "فوتر" or "اعمل فاتورة" or "سجل بيعة" (all mean create invoice)
+- Combine actions: "بيع و ابعت" = create_invoice_and_notify
+- Drop formal structure: "واتس أحمد الفاتورة" = send invoice to Ahmed on WhatsApp
+- Use "ده" / "دي" as demonstratives: "الطلب ده" = this order
+- Say "لي" or "لى" meaning "to me": "ابعتلي" = send to me
+
+When the intent combines invoice creation + notification, ALWAYS use create_invoice_and_notify.
+When in doubt about the exact command, ask a SHORT clarifying question (voice users expect fast responses).
+
 ## WhatsApp Rules (IMPORTANT)
 
 1. `send_whatsapp_message` is for single messages — use it for individual notifications or one-off communications.
@@ -136,6 +187,7 @@ ASK FIRST:
 - When the user speaks in Egyptian Arabic, respond in Egyptian Arabic.
 - After creating/modifying data, confirm with key details.
 - For analytical questions ("ليه الربح نزل", "فيه مشاكل؟", "إيه المخاطر"), ALWAYS use the analysis tools (why_profit_dropped, scan_anomalies, get_top_risks, get_business_insights) instead of guessing.
+- For voice channel: keep responses SHORT and natural. Voice users can't read long text. 1-2 sentences max for confirmations.
 """
 
 SALES_AGENT_PROMPT = """You are the Sales Execution Agent for a Ceramic Showroom ERP system.
