@@ -23,6 +23,7 @@ class SendDailyReportRequest(BaseModel):
 class UpdateSettingsRequest(BaseModel):
     whatsapp_api_token: str | None = None
     whatsapp_phone_number_id: str | None = None
+    whatsapp_owner_phone: str | None = None
     whatsapp_can_send: bool | None = None
     whatsapp_can_bulk_message: bool | None = None
     whatsapp_max_messages_per_request: int | None = None
@@ -38,6 +39,7 @@ def get_whatsapp_settings(
         "can_bulk_message": settings.whatsapp_can_bulk_message,
         "max_messages_per_request": settings.whatsapp_max_messages_per_request,
         "phone_number_id": settings.whatsapp_phone_number_id[:6] + "..." if settings.whatsapp_phone_number_id else "",
+        "owner_phone": settings.whatsapp_owner_phone[:6] + "..." if settings.whatsapp_owner_phone else "",
         "api_token_set": bool(settings.whatsapp_api_token),
     }
 
@@ -51,6 +53,8 @@ def update_whatsapp_settings(
         settings.whatsapp_api_token = body.whatsapp_api_token
     if body.whatsapp_phone_number_id is not None:
         settings.whatsapp_phone_number_id = body.whatsapp_phone_number_id
+    if body.whatsapp_owner_phone is not None:
+        settings.whatsapp_owner_phone = body.whatsapp_owner_phone
     if body.whatsapp_can_send is not None:
         settings.whatsapp_can_send = body.whatsapp_can_send
     if body.whatsapp_can_bulk_message is not None:
@@ -90,6 +94,19 @@ def send_daily_report(
 ):
     tools = WhatsAppTools(db)
     result = tools.send_daily_sales_report(body.to)
+    return result
+
+
+@router.post("/send-report-to-owner")
+def send_report_to_owner(
+    current_user: User = Depends(require_permission("admin:read")),
+    db: Session = Depends(get_db),
+):
+    if not settings.whatsapp_owner_phone:
+        return {"error": "Owner phone number not configured. Set WHATSAPP_OWNER_PHONE in settings."}
+
+    tools = WhatsAppTools(db)
+    result = tools.send_daily_sales_report(settings.whatsapp_owner_phone)
     return result
 
 
