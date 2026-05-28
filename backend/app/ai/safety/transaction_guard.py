@@ -38,6 +38,8 @@ SENSITIVE_OPERATIONS = {
     "refresh_summary_range",
     # WhatsApp sensitive operations
     "send_overdue_reminders",
+    # Workflow sensitive operations
+    "create_invoice_and_notify",
 }
 
 CONFIRMATION_THRESHOLDS = {
@@ -64,6 +66,8 @@ CONFIRMATION_THRESHOLDS = {
     "refresh_summary_range": lambda params: False,
     # WhatsApp thresholds (bulk messages always require confirmation)
     "send_overdue_reminders": lambda params: True,
+    # Workflow thresholds (invoice+notify uses same threshold as invoice)
+    "create_invoice_and_notify": lambda params: _total_amount(params) > 5000,
 }
 
 PENDING_KEY_PREFIX = "ai:pending_tx:"
@@ -101,6 +105,11 @@ class TransactionGuard:
             preview["estimated_total"] = _total_amount(params)
             preview["payment_type"] = params.get("payment_type", "cash")
             preview["item_count"] = len(params.get("items", []))
+        elif tool_name == "create_invoice_and_notify":
+            preview["estimated_total"] = _total_amount(params)
+            preview["payment_type"] = params.get("payment_type", "cash")
+            preview["item_count"] = len(params.get("items", []))
+            preview["will_send_whatsapp"] = True
         elif tool_name == "record_payment":
             preview["amount"] = params.get("amount", 0)
         elif tool_name == "refund_payment":
@@ -172,6 +181,7 @@ class TransactionGuard:
     def _describe_operation(self, tool_name: str, params: dict) -> str:
         descriptions = {
             "create_invoice": lambda p: f"إنشاء فاتورة بـ {len(p.get('items', []))} أصناف، إجمالي تقريبي: {_total_amount(p)} جنيه",
+            "create_invoice_and_notify": lambda p: f"إنشاء فاتورة بـ {len(p.get('items', []))} أصناف (إجمالي: {_total_amount(p)} جنيه) + إرسال إشعار واتساب للعميل",
             "cancel_invoice": lambda p: f"إلغاء الفاتورة رقم {p.get('invoice_id')}",
             "record_payment": lambda p: f"تسجيل دفعة {p.get('amount')} جنيه للعميل {p.get('customer_id')}",
             "refund_payment": lambda p: f"رد مبلغ {p.get('amount')} جنيه من فاتورة {p.get('invoice_id')}",
@@ -208,7 +218,7 @@ class TransactionGuard:
         return fn(params) if fn else f"تنفيذ {tool_name}"
 
     def _get_reverse_action(self, tool_name: str, params: dict, result: dict) -> Optional[dict]:
-        if tool_name == "create_invoice":
+        if tool_name in ("create_invoice", "create_invoice_and_notify"):
             invoice_id = result.get("invoice_id") or result.get("id")
             if invoice_id:
                 return {"tool": "cancel_invoice", "params": {"invoice_id": invoice_id, "reason": "rollback"}}
