@@ -21,6 +21,7 @@ FINANCIAL_TOOLS = {
     "set_supplier_opening_balance": lambda p: p.get("amount", 0),
     "set_cash_opening_balance": lambda p: p.get("amount", 0),
     "set_opening_inventory": lambda p: p.get("quantity", 0) * p.get("cost_per_unit", 0),
+    "create_invoice_and_notify": lambda p: sum(i.get("quantity", 0) * i.get("unit_price", 0) for i in p.get("items", [])),
 }
 
 
@@ -54,6 +55,7 @@ class ToolExecutor:
         from app.ai.tools.extended_tools import ExtendedTools
         from app.ai.tools.admin_tools import AdminTools
         from app.ai.tools.whatsapp_tools import WhatsAppTools
+        from app.ai.tools.workflow_tools import WorkflowTools
         from app.ai.rag.retriever import ERPContextRetriever
 
         sales = SalesTools(self.db)
@@ -64,6 +66,7 @@ class ToolExecutor:
         extended = ExtendedTools(self.db)
         admin = AdminTools(self.db)
         whatsapp = WhatsAppTools(self.db)
+        workflows = WorkflowTools(self.db)
         retriever = ERPContextRetriever(self.db)
 
         return {
@@ -336,6 +339,17 @@ class ToolExecutor:
             "send_daily_sales_report": lambda **p: whatsapp.send_daily_sales_report(
                 to=p["to"],
             ),
+            # --- Workflow: Composite Tools ---
+            "create_invoice_and_notify": lambda **p: workflows.create_invoice_and_notify(
+                customer_id=p["customer_id"],
+                items=p["items"],
+                payment_type=p.get("payment_type", "cash"),
+                warehouse_id=p.get("warehouse_id", 1),
+                discount=p.get("discount", 0),
+                paid_amount=p.get("paid_amount"),
+                notes=p.get("notes"),
+                message_template=p.get("message_template"),
+            ),
             # --- Safety: Confirmation ---
             "confirm_transaction": lambda **p: self._confirm_transaction(p["confirmation_id"]),
         }
@@ -450,7 +464,7 @@ class ToolExecutor:
 
     def _store_in_memory(self, tool_name: str, params: dict, result: dict):
         try:
-            if tool_name == "create_invoice":
+            if tool_name in ("create_invoice", "create_invoice_and_notify"):
                 customer_id = params.get("customer_id") or result.get("customer_id", 0)
                 self.vector_memory.store_transaction_fact(
                     customer_id=customer_id,

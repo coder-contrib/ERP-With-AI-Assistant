@@ -52,6 +52,8 @@ ROLE_AI_TOOLS = {
             "confirm_transaction",
             # WhatsApp tools
             "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
+            # Workflow tools
+            "create_invoice_and_notify",
         ],
     },
     "cashier": {
@@ -86,6 +88,7 @@ ROLE_AI_TOOLS = {
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
             "get_ledger_entries", "get_account_balance", "get_trial_balance",
             "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
+            "create_invoice_and_notify",
         ],
     },
     "warehouse_employee": {
@@ -119,6 +122,7 @@ ROLE_AI_TOOLS = {
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
             "get_ledger_entries", "get_account_balance", "get_trial_balance",
             "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
+            "create_invoice_and_notify",
         ],
     },
     "accountant": {
@@ -160,6 +164,7 @@ ROLE_AI_TOOLS = {
             "create_category", "update_category", "delete_category",
             "list_users", "create_user", "deactivate_user", "activate_user", "reset_user_password",
             "send_whatsapp_message", "send_overdue_reminders", "send_daily_sales_report",
+            "create_invoice_and_notify",
         ],
     },
     "ai_agent": {
