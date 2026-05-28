@@ -172,12 +172,9 @@ class InventoryRepository {
     return (response.data as List).cast<Map<String, dynamic>>();
   }
 
-  Future<String> getStockHistory(int productId, String productName) async {
-    final response = await _dio.post('/ai/chat', data: {
-      'session_id': 'inventory_history_$productId',
-      'message': 'Show me the recent stock movement history for product "$productName" (product ID: $productId). Include dates, quantities, and types.',
-    });
-    return response.data['response']?.toString() ?? 'No history available';
+  Future<List<Map<String, dynamic>>> getStockHistory(int productId, {int limit = 50}) async {
+    final response = await _dio.get('/inventory/transactions/$productId', queryParameters: {'limit': limit});
+    return (response.data as List).cast<Map<String, dynamic>>();
   }
 
   Future<void> refreshCache() async {
