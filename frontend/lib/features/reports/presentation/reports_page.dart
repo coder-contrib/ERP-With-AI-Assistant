@@ -146,7 +146,7 @@ class _OperationalTabState extends State<_OperationalTab> with SingleTickerProvi
   @override
   void initState() {
     super.initState();
-    _subTabController = TabController(length: 8, vsync: this);
+    _subTabController = TabController(length: 9, vsync: this);
   }
 
   @override
@@ -171,6 +171,7 @@ class _OperationalTabState extends State<_OperationalTab> with SingleTickerProvi
             indicatorWeight: 2,
             tabAlignment: TabAlignment.start,
             tabs: const [
+              Tab(text: 'Daily Operations'),
               Tab(text: 'Daily Sales'),
               Tab(text: 'Sales by Period'),
               Tab(text: 'Top Products'),
@@ -186,6 +187,7 @@ class _OperationalTabState extends State<_OperationalTab> with SingleTickerProvi
           child: TabBarView(
             controller: _subTabController,
             children: const [
+              _DailyOperationsReport(),
               _DailySalesReport(),
               _SalesByPeriodReport(),
               _TopProductsReport(),
@@ -419,6 +421,195 @@ Color _profitColor(dynamic v) {
 // ============================================================
 // OPERATIONAL REPORTS
 // ============================================================
+
+// ============================================================
+// DAILY OPERATIONS REPORT (comprehensive daily summary)
+// ============================================================
+
+class _DailyOperationsReport extends ConsumerWidget {
+  const _DailyOperationsReport();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dataAsync = ref.watch(reportsDailyOperationsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _reportHeader('Daily Operations Summary', () {}),
+          const SizedBox(height: 16),
+          dataAsync.when(
+            data: (data) {
+              final sales = data['sales'] as Map<String, dynamic>? ?? {};
+              final purchases = data['purchases'] as Map<String, dynamic>? ?? {};
+              final expenses = data['expenses'] as Map<String, dynamic>? ?? {};
+              final returns = data['returns'] as Map<String, dynamic>? ?? {};
+              final payments = data['payments'] as Map<String, dynamic>? ?? {};
+              final cashPosition = data['cash_position'] as Map<String, dynamic>? ?? {};
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Date header
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Report Date: ${data['report_date'] ?? 'Today'}',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Cash Position Summary (top)
+                  _sectionTitle('Cash Position'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _statBadge('Total In', cashPosition['total_in'], AppColors.success),
+                      _statBadge('Total Out', cashPosition['total_out'], AppColors.error),
+                      _statBadge('Net', cashPosition['net'], _profitColor(cashPosition['net'])),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Sales Section
+                  _sectionTitle('Sales'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _opsBadge('Invoices', '${sales['count'] ?? 0}', Icons.receipt, Colors.blue),
+                      _statBadge('Total', sales['total'], Colors.blue),
+                      _statBadge('Cash', sales['cash'], AppColors.success),
+                      _statBadge('Credit', sales['credit'], Colors.orange),
+                      _opsBadge('Items Sold', '${sales['items_sold'] ?? 0}', Icons.inventory_2, Colors.purple),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Purchases Section
+                  _sectionTitle('Purchases'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _opsBadge('Orders', '${purchases['count'] ?? 0}', Icons.shopping_cart, Colors.indigo),
+                      _statBadge('Total', purchases['total'], Colors.indigo),
+                      _statBadge('Paid', purchases['paid'], AppColors.success),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Expenses Section
+                  _sectionTitle('Expenses'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _opsBadge('Count', '${expenses['count'] ?? 0}', Icons.money_off, Colors.red),
+                      _statBadge('Total', expenses['total'], Colors.red),
+                    ],
+                  ),
+                  if ((expenses['categories'] as List?)?.isNotEmpty ?? false) ...[
+                    const SizedBox(height: 8),
+                    ...((expenses['categories'] as List?) ?? []).map<Widget>((c) => Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child: Text('• ${c['category']}: ${_fmtAmount(c['amount'])} IQD',
+                        style: const TextStyle(fontSize: 13)),
+                    )),
+                  ],
+                  const SizedBox(height: 24),
+
+                  // Returns Section
+                  _sectionTitle('Returns'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _opsBadge('Count', '${returns['count'] ?? 0}', Icons.undo, Colors.amber),
+                      _statBadge('Total', returns['total'], Colors.amber),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Payments Section
+                  _sectionTitle('Payments'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _statBadge('Received', payments['received'], AppColors.success),
+                      _statBadge('Made', payments['made'], Colors.red),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // New Customers
+                  _opsBadge('New Customers', '${data['new_customers'] ?? 0}', Icons.person_add, Colors.teal),
+                  const SizedBox(height: 24),
+
+                  // Top Products
+                  if ((data['top_products'] as List?)?.isNotEmpty ?? false) ...[
+                    _sectionTitle('Top Products Today'),
+                    const SizedBox(height: 8),
+                    _buildTable(isDark, columns: const [
+                      DataColumn(label: Text('Product', style: TextStyle(fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                      DataColumn(label: Text('Revenue', style: TextStyle(fontWeight: FontWeight.w600)), numeric: true),
+                    ], rows: ((data['top_products'] as List?) ?? []).map<DataRow>((p) => DataRow(cells: [
+                      DataCell(Text(p['name'] ?? '', style: const TextStyle(fontSize: 13))),
+                      DataCell(Text('${p['quantity'] ?? 0}', style: const TextStyle(fontSize: 13))),
+                      DataCell(Text('${_fmtAmount(p['revenue'])} IQD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+                    ])).toList()),
+                  ],
+                ],
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Text('Error: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _sectionTitle(String title) {
+  return Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700));
+}
+
+Widget _opsBadge(String label, String value, IconData icon, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(fontSize: 11, color: color)),
+          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color)),
+        ]),
+      ],
+    ),
+  );
+}
 
 class _DailySalesReport extends ConsumerWidget {
   const _DailySalesReport();
