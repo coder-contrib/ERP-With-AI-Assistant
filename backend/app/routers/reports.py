@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text as sql_text
 from datetime import date, timedelta
 from app.database import get_db
 from app.core.deps import require_permission
@@ -7,6 +8,138 @@ from app.models.users import User
 from app.services.report_service import ReportService
 
 router = APIRouter()
+
+
+@router.get("/daily-operations")
+def daily_operations_report(
+    report_date: date = Query(default=None),
+    current_user: User = Depends(require_permission("reports:read")),
+    db: Session = Depends(get_db),
+):
+    d = report_date or date.today()
+    d_str = d.isoformat()
+
+    # Sales
+    sales_row = db.execute(sql_text("""
+        SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+        FROM sales_invoices WHERE DATE(created_at) = :d
+    """), {"d": d_str}).fetchone()
+    sales_count, sales_total, sales_paid = sales_row if sales_row else (0, 0, 0)
+
+    cash_sales = db.execute(sql_text("""
+        SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
+        WHERE DATE(created_at) = :d AND invoice_type = 'cash'
+    """), {"d": d_str}).scalar() or 0
+
+    credit_sales = db.execute(sql_text("""
+        SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
+        WHERE DATE(created_at) = :d AND invoice_type = 'credit'
+    """), {"d": d_str}).scalar() or 0
+
+    items_sold = db.execute(sql_text("""
+        SELECT COALESCE(SUM(si.quantity), 0)
+        FROM sale_items si JOIN sales_invoices inv ON inv.id = si.invoice_id
+        WHERE DATE(inv.created_at) = :d
+    """), {"d": d_str}).scalar() or 0
+
+    # Purchases
+    purch_row = db.execute(sql_text("""
+        SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+        FROM purchase_invoices WHERE DATE(created_at) = :d
+    """), {"d": d_str}).fetchone()
+    purch_count, purch_total, purch_paid = purch_row if purch_row else (0, 0, 0)
+
+    # Expenses
+    exp_row = db.execute(sql_text("""
+        SELECT COUNT(id), COALESCE(SUM(amount), 0)
+        FROM expenses WHERE DATE(expense_date) = :d
+    """), {"d": d_str}).fetchone()
+    exp_count, exp_total = exp_row if exp_row else (0, 0)
+
+    # Expense categories
+    exp_cats = db.execute(sql_text("""
+        SELECT category, SUM(amount) as total
+        FROM expenses WHERE DATE(expense_date) = :d
+        GROUP BY category ORDER BY total DESC
+    """), {"d": d_str}).fetchall()
+
+    # Returns
+    ret_row = db.execute(sql_text("""
+        SELECT COUNT(id), COALESCE(SUM(total_amount), 0)
+        FROM sales_invoices WHERE DATE(created_at) = :d AND status = 'cancelled'
+    """), {"d": d_str}).fetchone()
+    ret_count, ret_total = ret_row if ret_row else (0, 0)
+
+    # Payments received
+    payments_in = db.execute(sql_text("""
+        SELECT COALESCE(SUM(amount), 0)
+        FROM payments WHERE DATE(created_at) = :d AND type = 'incoming'
+    """), {"d": d_str}).scalar() or 0
+
+    # Payments made
+    payments_out = db.execute(sql_text("""
+        SELECT COALESCE(SUM(amount), 0)
+        FROM payments WHERE DATE(created_at) = :d AND type = 'outgoing'
+    """), {"d": d_str}).scalar() or 0
+
+    # New customers
+    new_customers = db.execute(sql_text("""
+        SELECT COUNT(id) FROM customers WHERE DATE(created_at) = :d
+    """), {"d": d_str}).scalar() or 0
+
+    # Top sold products today
+    top_products = db.execute(sql_text("""
+        SELECT p.name, SUM(si.quantity) as qty, SUM(si.total_price) as rev
+        FROM sale_items si
+        JOIN products p ON p.id = si.product_id
+        JOIN sales_invoices inv ON inv.id = si.invoice_id
+        WHERE DATE(inv.created_at) = :d
+        GROUP BY p.id, p.name ORDER BY rev DESC LIMIT 5
+    """), {"d": d_str}).fetchall()
+
+    total_in = float(sales_paid) + float(payments_in)
+    total_out = float(purch_paid) + float(exp_total) + float(payments_out)
+    net_cash = total_in - total_out
+
+    return {
+        "report": "daily_operations",
+        "date": d_str,
+        "data": {
+            "sales": {
+                "count": sales_count,
+                "total": float(sales_total),
+                "paid": float(sales_paid),
+                "cash": float(cash_sales),
+                "credit": float(credit_sales),
+                "items_sold": int(items_sold),
+            },
+            "purchases": {
+                "count": purch_count,
+                "total": float(purch_total),
+                "paid": float(purch_paid),
+            },
+            "expenses": {
+                "count": exp_count,
+                "total": float(exp_total),
+                "categories": [{"category": c or "Uncategorized", "amount": float(a)} for c, a in exp_cats],
+            },
+            "returns": {
+                "count": ret_count,
+                "total": float(ret_total),
+            },
+            "payments": {
+                "received": float(payments_in),
+                "made": float(payments_out),
+            },
+            "new_customers": new_customers,
+            "top_products": [{"name": n, "qty": int(q), "revenue": float(r)} for n, q, r in top_products],
+            "cash_position": {
+                "total_in": total_in,
+                "total_out": total_out,
+                "net": net_cash,
+            },
+        },
+    }
 
 
 @router.get("/daily-sales")
