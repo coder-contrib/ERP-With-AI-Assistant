@@ -46,4 +46,10 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-celery_app.autodiscover_tasks(["app.tasks"])
+celery_app.conf.include = [
+    "app.tasks.notifications",
+    "app.tasks.accounting",
+    "app.tasks.inventory",
+    "app.tasks.reports",
+    "app.tasks.ai",
+]

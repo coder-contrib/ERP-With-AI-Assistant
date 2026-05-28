@@ -37,9 +37,10 @@ class ManagerAgent:
     Does NOT execute anything itself — passes decisions to the ToolExecutor.
     """
 
-    def __init__(self, db: Session, user_role: str = "ai_agent"):
+    def __init__(self, db: Session, user_role: str = "ai_agent", channel: str = "chat"):
         self.db = db
         self.user_role = user_role
+        self.channel = channel
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.ai_model
         self.vector_memory = VectorMemory()
@@ -49,8 +50,8 @@ class ManagerAgent:
         memory.add_user_message(user_message)
         history = memory.get_context_window(max_messages=20)
 
-        # Create executor scoped to this session + user role
-        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role)
+        # Create executor scoped to this session + user role + channel
+        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role, channel=self.channel)
 
         # Retrieve long-term memory context
         long_term_context = self._get_long_term_context(user_message)

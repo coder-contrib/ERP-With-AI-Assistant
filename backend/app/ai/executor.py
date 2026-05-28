@@ -27,15 +27,16 @@ FINANCIAL_TOOLS = {
 class ToolExecutor:
     """Pure execution layer. No LLM. No reasoning."""
 
-    def __init__(self, db: Session, session_id: str = "", user_role: str = "ai_agent"):
+    def __init__(self, db: Session, session_id: str = "", user_role: str = "ai_agent", channel: str = "chat"):
         self.db = db
         self.session_id = session_id
         self.user_role = user_role
+        self.channel = channel
         self._tools = None
         self.guard = TransactionGuard()
         self.idempotency = IdempotencyGuard(session_id)
         self.permissions = AIPermissionChecker(user_role)
-        self.observer = AIObserver(session_id, user_role)
+        self.observer = AIObserver(session_id, user_role, channel=channel)
         self.vector_memory = VectorMemory()
 
     @property
