@@ -210,6 +210,7 @@ def _classify_entry(entry: dict) -> dict:
         "tool": tool, "tool_label": _tool_label(tool),
         "category": TOOL_CATEGORIES.get(tool, "أخرى"),
         "role": entry.get("user_role", "ai_agent"),
+        "channel": entry.get("channel", "chat"),
         "session_id": entry.get("session_id", ""),
         "description": description,
         "execution_ms": entry.get("execution_ms", 0),
@@ -280,12 +281,33 @@ def _describe_execution(tool: str, tool_input: dict, result_summary: str) -> str
     return "تم التنفيذ"
 
 
+def _load_entries_in_window(hours: int, limit: int = 999) -> list[dict]:
+    """Load audit entries within the given time window."""
+    redis = get_redis()
+    entry_ids = redis.lrange(AUDIT_INDEX_KEY, 0, limit)
+    cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    entries = []
+    for eid in entry_ids:
+        raw = redis.get(f"{AUDIT_KEY_PREFIX}{eid}")
+        if not raw:
+            continue
+        try:
+            entry = json.loads(raw)
+        except Exception:
+            continue
+        if entry.get("timestamp", "") < cutoff:
+            continue
+        entries.append(entry)
+    return entries
+
+
 @router.get("/feed")
 async def get_activity_feed(
     limit: int = Query(50, ge=1, le=200),
     status_filter: Optional[str] = Query(None),
     role_filter: Optional[str] = Query(None),
     category_filter: Optional[str] = Query(None),
+    channel_filter: Optional[str] = Query(None),
     session_id: Optional[str] = Query(None),
     _current_user=Depends(get_current_admin_user),
 ):
@@ -308,13 +330,15 @@ async def get_activity_feed(
                 continue
             if category_filter and item["category"] != category_filter:
                 continue
+            if channel_filter and item["channel"] != channel_filter:
+                continue
             feed_items.append(item)
             if len(feed_items) >= limit:
                 break
         except Exception:
             continue
 
-    return {"feed": feed_items, "total": len(feed_items), "filters_applied": {"status": status_filter, "role": role_filter, "category": category_filter, "session_id": session_id}}
+    return {"feed": feed_items, "total": len(feed_items), "filters_applied": {"status": status_filter, "role": role_filter, "category": category_filter, "channel": channel_filter, "session_id": session_id}}
 
 
 @router.get("/stats")
@@ -322,7 +346,7 @@ async def get_audit_stats(hours: int = Query(24, ge=1, le=168), _current_user=De
     redis = get_redis()
     entry_ids = redis.lrange(AUDIT_INDEX_KEY, 0, 999)
     cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
-    stats = {"by_status": {"executed": 0, "blocked": 0, "failed": 0, "pending_confirmation": 0}, "by_role": {}, "by_category": {}, "by_tool": {}, "performance": {"total_calls": 0, "avg_execution_ms": 0, "max_execution_ms": 0}, "timeline": []}
+    stats = {"by_status": {"executed": 0, "blocked": 0, "failed": 0, "pending_confirmation": 0}, "by_role": {}, "by_category": {}, "by_tool": {}, "by_channel": {}, "performance": {"total_calls": 0, "avg_execution_ms": 0, "max_execution_ms": 0}, "timeline": []}
     total_ms, max_ms, hourly_buckets = 0, 0, {}
 
     for eid in entry_ids:
@@ -346,6 +370,8 @@ async def get_audit_stats(hours: int = Query(24, ge=1, le=168), _current_user=De
         stats["by_category"][cat] = stats["by_category"].get(cat, 0) + 1
         tool = item["tool"]
         stats["by_tool"][tool] = stats["by_tool"].get(tool, 0) + 1
+        channel = item.get("channel", "chat")
+        stats["by_channel"][channel] = stats["by_channel"].get(channel, 0) + 1
         ms = entry.get("execution_ms", 0)
         total_ms += ms
         max_ms = max(max_ms, ms)
@@ -380,7 +406,7 @@ async def get_active_sessions(limit: int = Query(20, ge=1, le=100), _current_use
             continue
         sid = entry.get("session_id", "unknown")
         if sid not in sessions:
-            sessions[sid] = {"session_id": sid, "role": entry.get("user_role", "unknown"), "first_seen": entry.get("timestamp", ""), "last_seen": entry.get("timestamp", ""), "total_actions": 0, "blocked_actions": 0, "tools_used": set()}
+            sessions[sid] = {"session_id": sid, "role": entry.get("user_role", "unknown"), "channel": entry.get("channel", "chat"), "first_seen": entry.get("timestamp", ""), "last_seen": entry.get("timestamp", ""), "total_actions": 0, "blocked_actions": 0, "tools_used": set()}
         s = sessions[sid]
         s["total_actions"] += 1
         s["last_seen"] = entry.get("timestamp", s["last_seen"])
@@ -412,7 +438,7 @@ async def get_blocked_actions(limit: int = Query(50, ge=1, le=200), _current_use
             continue
         if not entry.get("was_blocked"):
             continue
-        blocked_items.append({"id": entry.get("entry_id", ""), "timestamp": entry.get("timestamp", ""), "session_id": entry.get("session_id", ""), "role": entry.get("user_role", "unknown"), "tool": entry.get("tool_name", ""), "tool_label": _tool_label(entry.get("tool_name", "")), "reason": entry.get("blocked_reason", ""), "attempted_input": entry.get("tool_input", {})})
+        blocked_items.append({"id": entry.get("entry_id", ""), "timestamp": entry.get("timestamp", ""), "session_id": entry.get("session_id", ""), "role": entry.get("user_role", "unknown"), "channel": entry.get("channel", "chat"), "tool": entry.get("tool_name", ""), "tool_label": _tool_label(entry.get("tool_name", "")), "reason": entry.get("blocked_reason", ""), "attempted_input": entry.get("tool_input", {})})
         if len(blocked_items) >= limit:
             break
     return {"blocked_actions": blocked_items, "total": len(blocked_items), "severity": "critical" if len(blocked_items) > 10 else "normal"}
@@ -451,3 +477,260 @@ async def get_performance_metrics(hours: int = Query(24, ge=1, le=168), _current
     all_times = [ms for times in tool_perf.values() for ms in times]
     overall_avg = sum(all_times) / len(all_times) if all_times else 0
     return {"period_hours": hours, "overall_avg_ms": round(overall_avg, 1), "total_executions": len(all_times), "tools": metrics}
+
+
+# ─── New Analytics Endpoints ───────────────────────────────────────────────────
+
+
+@router.get("/analytics/latency")
+async def get_latency_analytics(
+    hours: int = Query(24, ge=1, le=168),
+    channel: Optional[str] = Query(None),
+    role: Optional[str] = Query(None),
+    _current_user=Depends(get_current_admin_user),
+):
+    """Per-tool latency with p50, p75, p95, p99 percentiles."""
+    entries = _load_entries_in_window(hours)
+    tool_times: dict[str, list[float]] = {}
+
+    for entry in entries:
+        if entry.get("was_blocked"):
+            continue
+        if channel and entry.get("channel", "chat") != channel:
+            continue
+        if role and entry.get("user_role", "") != role:
+            continue
+        tool = entry.get("tool_name", "unknown")
+        ms = entry.get("execution_ms", 0)
+        tool_times.setdefault(tool, []).append(ms)
+
+    def _percentile(sorted_list: list[float], pct: float) -> float:
+        if not sorted_list:
+            return 0
+        idx = int(len(sorted_list) * pct)
+        idx = min(idx, len(sorted_list) - 1)
+        return round(sorted_list[idx], 1)
+
+    metrics = []
+    for tool, times in tool_times.items():
+        times.sort()
+        count = len(times)
+        metrics.append({
+            "tool": tool,
+            "tool_label": _tool_label(tool),
+            "call_count": count,
+            "avg_ms": round(sum(times) / count, 1) if count else 0,
+            "p50_ms": _percentile(times, 0.50),
+            "p75_ms": _percentile(times, 0.75),
+            "p95_ms": _percentile(times, 0.95),
+            "p99_ms": _percentile(times, 0.99),
+            "min_ms": round(times[0], 1) if times else 0,
+            "max_ms": round(times[-1], 1) if times else 0,
+        })
+
+    metrics.sort(key=lambda x: x["p95_ms"], reverse=True)
+    all_times = sorted(ms for times in tool_times.values() for ms in times)
+    return {
+        "period_hours": hours,
+        "filters": {"channel": channel, "role": role},
+        "global_p50_ms": _percentile(all_times, 0.50),
+        "global_p95_ms": _percentile(all_times, 0.95),
+        "global_avg_ms": round(sum(all_times) / len(all_times), 1) if all_times else 0,
+        "total_executions": len(all_times),
+        "tools": metrics,
+    }
+
+
+@router.get("/analytics/success-rates")
+async def get_success_rates(
+    hours: int = Query(24, ge=1, le=168),
+    channel: Optional[str] = Query(None),
+    _current_user=Depends(get_current_admin_user),
+):
+    """Success/failure/blocked rates overall and per-tool."""
+    entries = _load_entries_in_window(hours)
+    tool_stats: dict[str, dict] = {}
+    totals = {"executed": 0, "failed": 0, "blocked": 0, "pending_confirmation": 0}
+
+    for entry in entries:
+        if channel and entry.get("channel", "chat") != channel:
+            continue
+        item = _classify_entry(entry)
+        status = item["status"]
+        tool = item["tool"]
+
+        if status in totals:
+            totals[status] += 1
+
+        if tool not in tool_stats:
+            tool_stats[tool] = {"tool": tool, "tool_label": _tool_label(tool), "executed": 0, "failed": 0, "blocked": 0, "pending_confirmation": 0}
+        if status in tool_stats[tool]:
+            tool_stats[tool][status] += 1
+
+    total_all = sum(totals.values())
+    overall_rates = {
+        "total_calls": total_all,
+        "success_rate": round(totals["executed"] / total_all * 100, 1) if total_all else 0,
+        "failure_rate": round(totals["failed"] / total_all * 100, 1) if total_all else 0,
+        "blocked_rate": round(totals["blocked"] / total_all * 100, 1) if total_all else 0,
+        "confirmation_rate": round(totals["pending_confirmation"] / total_all * 100, 1) if total_all else 0,
+    }
+
+    per_tool = []
+    for stats in tool_stats.values():
+        tool_total = stats["executed"] + stats["failed"] + stats["blocked"] + stats["pending_confirmation"]
+        per_tool.append({
+            **stats,
+            "total": tool_total,
+            "success_rate": round(stats["executed"] / tool_total * 100, 1) if tool_total else 0,
+            "failure_rate": round(stats["failed"] / tool_total * 100, 1) if tool_total else 0,
+        })
+    per_tool.sort(key=lambda x: x["total"], reverse=True)
+
+    return {
+        "period_hours": hours,
+        "filters": {"channel": channel},
+        "overall": overall_rates,
+        "by_status": totals,
+        "per_tool": per_tool[:20],
+    }
+
+
+@router.get("/analytics/role-usage")
+async def get_role_usage(
+    hours: int = Query(24, ge=1, le=168),
+    _current_user=Depends(get_current_admin_user),
+):
+    """Per-role detailed usage analytics."""
+    entries = _load_entries_in_window(hours)
+    role_data: dict[str, dict] = {}
+
+    for entry in entries:
+        role = entry.get("user_role", "ai_agent")
+        if role not in role_data:
+            role_data[role] = {
+                "role": role,
+                "total_calls": 0,
+                "executed": 0,
+                "failed": 0,
+                "blocked": 0,
+                "total_ms": 0,
+                "tools_used": {},
+                "categories_used": {},
+                "channels_used": {},
+            }
+        rd = role_data[role]
+        rd["total_calls"] += 1
+
+        item = _classify_entry(entry)
+        status = item["status"]
+        if status == "executed":
+            rd["executed"] += 1
+        elif status == "failed":
+            rd["failed"] += 1
+        elif status == "blocked":
+            rd["blocked"] += 1
+
+        rd["total_ms"] += entry.get("execution_ms", 0)
+
+        tool = entry.get("tool_name", "unknown")
+        rd["tools_used"][tool] = rd["tools_used"].get(tool, 0) + 1
+
+        cat = TOOL_CATEGORIES.get(tool, "أخرى")
+        rd["categories_used"][cat] = rd["categories_used"].get(cat, 0) + 1
+
+        ch = entry.get("channel", "chat")
+        rd["channels_used"][ch] = rd["channels_used"].get(ch, 0) + 1
+
+    roles = []
+    for rd in role_data.values():
+        total = rd["total_calls"]
+        roles.append({
+            "role": rd["role"],
+            "total_calls": total,
+            "success_rate": round(rd["executed"] / total * 100, 1) if total else 0,
+            "blocked_rate": round(rd["blocked"] / total * 100, 1) if total else 0,
+            "avg_latency_ms": round(rd["total_ms"] / total, 1) if total else 0,
+            "top_tools": dict(sorted(rd["tools_used"].items(), key=lambda x: x[1], reverse=True)[:5]),
+            "categories": rd["categories_used"],
+            "channels": rd["channels_used"],
+        })
+    roles.sort(key=lambda x: x["total_calls"], reverse=True)
+
+    return {
+        "period_hours": hours,
+        "roles": roles,
+    }
+
+
+@router.get("/analytics/channel-comparison")
+async def get_channel_comparison(
+    hours: int = Query(24, ge=1, le=168),
+    _current_user=Depends(get_current_admin_user),
+):
+    """Voice vs chat performance comparison."""
+    entries = _load_entries_in_window(hours)
+    channel_data: dict[str, dict] = {}
+
+    for entry in entries:
+        ch = entry.get("channel", "chat")
+        if ch not in channel_data:
+            channel_data[ch] = {
+                "channel": ch,
+                "total_calls": 0,
+                "executed": 0,
+                "failed": 0,
+                "blocked": 0,
+                "times": [],
+                "tools_used": {},
+                "roles": {},
+            }
+        cd = channel_data[ch]
+        cd["total_calls"] += 1
+
+        item = _classify_entry(entry)
+        status = item["status"]
+        if status == "executed":
+            cd["executed"] += 1
+        elif status == "failed":
+            cd["failed"] += 1
+        elif status == "blocked":
+            cd["blocked"] += 1
+
+        ms = entry.get("execution_ms", 0)
+        cd["times"].append(ms)
+
+        tool = entry.get("tool_name", "unknown")
+        cd["tools_used"][tool] = cd["tools_used"].get(tool, 0) + 1
+
+        role = entry.get("user_role", "ai_agent")
+        cd["roles"][role] = cd["roles"].get(role, 0) + 1
+
+    def _percentile(sorted_list: list[float], pct: float) -> float:
+        if not sorted_list:
+            return 0
+        idx = min(int(len(sorted_list) * pct), len(sorted_list) - 1)
+        return round(sorted_list[idx], 1)
+
+    channels = []
+    for cd in channel_data.values():
+        total = cd["total_calls"]
+        times = sorted(cd["times"])
+        channels.append({
+            "channel": cd["channel"],
+            "total_calls": total,
+            "success_rate": round(cd["executed"] / total * 100, 1) if total else 0,
+            "failure_rate": round(cd["failed"] / total * 100, 1) if total else 0,
+            "blocked_rate": round(cd["blocked"] / total * 100, 1) if total else 0,
+            "avg_ms": round(sum(times) / len(times), 1) if times else 0,
+            "p50_ms": _percentile(times, 0.50),
+            "p95_ms": _percentile(times, 0.95),
+            "top_tools": dict(sorted(cd["tools_used"].items(), key=lambda x: x[1], reverse=True)[:5]),
+            "roles": cd["roles"],
+        })
+    channels.sort(key=lambda x: x["total_calls"], reverse=True)
+
+    return {
+        "period_hours": hours,
+        "channels": channels,
+    }

@@ -7,6 +7,7 @@ Logs every AI decision with:
 - Execution time
 - Session context
 - User role
+- Channel (voice_ws, chat, chat_stream)
 
 Stores in both structured logs (for debugging) and Redis (for audit dashboard).
 """
@@ -25,6 +26,8 @@ AUDIT_INDEX_KEY = "ai:audit:index"
 AUDIT_SESSION_PREFIX = "ai:audit:session:"
 MAX_AUDIT_ENTRIES = 1000
 
+VALID_CHANNELS = ("voice_ws", "chat", "chat_stream")
+
 
 class AIAuditEntry:
     """Single auditable AI action."""
@@ -36,6 +39,7 @@ class AIAuditEntry:
         tool_name: str,
         tool_input: dict,
         decision_reason: Optional[str] = None,
+        channel: str = "chat",
     ):
         self.entry_id = str(uuid.uuid4())[:12]
         self.session_id = session_id
@@ -43,6 +47,7 @@ class AIAuditEntry:
         self.tool_name = tool_name
         self.tool_input = tool_input
         self.decision_reason = decision_reason
+        self.channel = channel if channel in VALID_CHANNELS else "chat"
         self.started_at = time.time()
         self.finished_at: Optional[float] = None
         self.result: Optional[dict] = None
@@ -74,6 +79,7 @@ class AIAuditEntry:
             "entry_id": self.entry_id,
             "session_id": self.session_id,
             "user_role": self.user_role,
+            "channel": self.channel,
             "tool_name": self.tool_name,
             "tool_input": self.tool_input,
             "decision_reason": self.decision_reason,
@@ -98,7 +104,7 @@ class AIObserver:
     """Observability service for AI tool execution.
 
     Usage:
-        observer = AIObserver(session_id, user_role)
+        observer = AIObserver(session_id, user_role, channel="chat_stream")
         entry = observer.start(tool_name, tool_input, reason)
         try:
             result = execute_tool(...)
@@ -107,9 +113,10 @@ class AIObserver:
             observer.fail(entry, str(e))
     """
 
-    def __init__(self, session_id: str, user_role: str = "ai_agent"):
+    def __init__(self, session_id: str, user_role: str = "ai_agent", channel: str = "chat"):
         self.session_id = session_id
         self.user_role = user_role
+        self.channel = channel if channel in VALID_CHANNELS else "chat"
         self.redis = get_redis()
 
     def start(self, tool_name: str, tool_input: dict, reason: Optional[str] = None) -> AIAuditEntry:
@@ -120,10 +127,11 @@ class AIObserver:
             tool_name=tool_name,
             tool_input=tool_input,
             decision_reason=reason,
+            channel=self.channel,
         )
         logger.info(
             f"[AI_DECISION] session={self.session_id} role={self.user_role} "
-            f"tool={tool_name} input={json.dumps(tool_input, default=str)[:200]}"
+            f"channel={self.channel} tool={tool_name} input={json.dumps(tool_input, default=str)[:200]}"
         )
         return entry
 
@@ -133,7 +141,7 @@ class AIObserver:
         self._persist(entry)
         logger.info(
             f"[AI_COMPLETE] session={self.session_id} tool={entry.tool_name} "
-            f"time={entry.execution_ms}ms success=true"
+            f"channel={self.channel} time={entry.execution_ms}ms success=true"
         )
 
     def fail(self, entry: AIAuditEntry, error: str):
@@ -142,7 +150,7 @@ class AIObserver:
         self._persist(entry)
         logger.warning(
             f"[AI_FAIL] session={self.session_id} tool={entry.tool_name} "
-            f"time={entry.execution_ms}ms error={error[:100]}"
+            f"channel={self.channel} time={entry.execution_ms}ms error={error[:100]}"
         )
 
     def block(self, entry: AIAuditEntry, reason: str):
@@ -151,7 +159,7 @@ class AIObserver:
         self._persist(entry)
         logger.warning(
             f"[AI_BLOCKED] session={self.session_id} tool={entry.tool_name} "
-            f"role={self.user_role} reason={reason}"
+            f"channel={self.channel} role={self.user_role} reason={reason}"
         )
 
     def get_session_audit(self, limit: int = 50) -> list[dict]:
