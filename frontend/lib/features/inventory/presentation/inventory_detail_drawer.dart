@@ -8,8 +8,19 @@ class InventoryDetailDrawer extends ConsumerStatefulWidget {
   final InventoryItem item;
   final VoidCallback onClose;
   final VoidCallback onTransfer;
+  final VoidCallback onAddStock;
+  final VoidCallback onDeductStock;
+  final VoidCallback onViewHistory;
 
-  const InventoryDetailDrawer({super.key, required this.item, required this.onClose, required this.onTransfer});
+  const InventoryDetailDrawer({
+    super.key,
+    required this.item,
+    required this.onClose,
+    required this.onTransfer,
+    required this.onAddStock,
+    required this.onDeductStock,
+    required this.onViewHistory,
+  });
 
   @override
   ConsumerState<InventoryDetailDrawer> createState() => _InventoryDetailDrawerState();
@@ -82,7 +93,6 @@ class _InventoryDetailDrawerState extends ConsumerState<InventoryDetailDrawer> w
                   ],
                 ),
                 const SizedBox(height: 8),
-                // Stock summary
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: statusColor.withOpacity(0.06), borderRadius: BorderRadius.circular(8)),
@@ -223,10 +233,10 @@ class _InventoryDetailDrawerState extends ConsumerState<InventoryDetailDrawer> w
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _ActionTile(icon: Icons.add_circle, label: 'Add Stock (Purchase)', color: AppColors.success, onTap: () {}),
-                      _ActionTile(icon: Icons.remove_circle, label: 'Deduct Stock (Waste/Correction)', color: AppColors.error, onTap: () {}),
+                      _ActionTile(icon: Icons.add_circle, label: 'Add Stock (Purchase)', color: AppColors.success, onTap: widget.onAddStock),
+                      _ActionTile(icon: Icons.remove_circle, label: 'Deduct Stock (Waste/Correction)', color: AppColors.error, onTap: widget.onDeductStock),
                       _ActionTile(icon: Icons.swap_horiz, label: 'Transfer Between Warehouses', color: AppColors.info, onTap: widget.onTransfer),
-                      _ActionTile(icon: Icons.history, label: 'View Transaction History', color: AppColors.textSecondary, onTap: () {}),
+                      _ActionTile(icon: Icons.history, label: 'View Transaction History', color: AppColors.textSecondary, onTap: widget.onViewHistory),
                       _ActionTile(icon: Icons.smart_toy, label: 'AI Analysis', color: AppColors.primary, onTap: () => _tabController.animateTo(1)),
                     ],
                   ),
@@ -269,6 +279,7 @@ class _ActionTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: color),
         title: Text(label, style: const TextStyle(fontSize: 14)),
+        trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
         onTap: onTap,
       ),

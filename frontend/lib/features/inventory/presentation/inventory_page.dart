@@ -47,6 +47,26 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
     showDialog(context: context, builder: (_) => _TransferDialog(ref: ref, item: item));
   }
 
+  void _showAdjustStockDialog(InventoryItem item) {
+    showDialog(context: context, builder: (_) => _AdjustStockDialog(ref: ref, item: item));
+  }
+
+  void _showStockHistoryDialog(InventoryItem item) {
+    showDialog(context: context, builder: (_) => _StockHistoryDialog(ref: ref, item: item));
+  }
+
+  void _showAddStockDialog(InventoryItem item) {
+    showDialog(context: context, builder: (_) => _AddStockDialog(ref: ref, item: item));
+  }
+
+  void _showDeductStockDialog(InventoryItem item) {
+    showDialog(context: context, builder: (_) => _DeductStockDialog(ref: ref, item: item));
+  }
+
+  void _showAlertsDialog() {
+    showDialog(context: context, builder: (_) => _AlertsDialog(ref: ref));
+  }
+
   void _showOpeningStockDialog() async {
     final result = await showDialog(
       context: context,
@@ -136,7 +156,7 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                     ),
                     const Spacer(),
                     IconButton(
-                      onPressed: () {},
+                      onPressed: _showAlertsDialog,
                       icon: const Icon(Icons.notifications_outlined),
                       tooltip: 'Alerts',
                     ),
@@ -248,6 +268,8 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
                               isDark: isDark,
                               onTap: () => _openDetail(item),
                               onTransfer: () => _showTransferDialog(item),
+                              onAdjust: () => _showAdjustStockDialog(item),
+                              onHistory: () => _showStockHistoryDialog(item),
                             );
                           },
                         );
@@ -265,6 +287,9 @@ class _InventoryPageState extends ConsumerState<InventoryPage> {
             item: _selectedItem!,
             onClose: _closeDetail,
             onTransfer: () => _showTransferDialog(_selectedItem!),
+            onAddStock: () => _showAddStockDialog(_selectedItem!),
+            onDeductStock: () => _showDeductStockDialog(_selectedItem!),
+            onViewHistory: () => _showStockHistoryDialog(_selectedItem!),
           ),
       ],
     );
@@ -347,7 +372,9 @@ class _InventoryCard extends StatelessWidget {
   final bool isDark;
   final VoidCallback onTap;
   final VoidCallback onTransfer;
-  const _InventoryCard({required this.item, required this.isSelected, required this.isDark, required this.onTap, required this.onTransfer});
+  final VoidCallback onAdjust;
+  final VoidCallback onHistory;
+  const _InventoryCard({required this.item, required this.isSelected, required this.isDark, required this.onTap, required this.onTransfer, required this.onAdjust, required this.onHistory});
 
   Color get _statusColor {
     switch (item.status) {
@@ -426,7 +453,11 @@ class _InventoryCard extends StatelessWidget {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (action) {
-                if (action == 'transfer') onTransfer();
+                switch (action) {
+                  case 'transfer': onTransfer(); break;
+                  case 'adjust': onAdjust(); break;
+                  case 'history': onHistory(); break;
+                }
               },
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'transfer', child: Row(children: [Icon(Icons.swap_horiz, size: 18), SizedBox(width: 8), Text('Transfer')])),
@@ -494,6 +525,10 @@ class _TransferDialogState extends State<_TransferDialog> {
         ElevatedButton(
           onPressed: _loading ? null : () async {
             if (_fromWarehouse == null || _toWarehouse == null || _qtyController.text.isEmpty) return;
+            if (_fromWarehouse == _toWarehouse) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Source and destination must be different'), backgroundColor: Colors.orange));
+              return;
+            }
             setState(() => _loading = true);
             try {
               final repo = widget.ref.read(inventoryRepositoryProvider);
@@ -505,7 +540,10 @@ class _TransferDialogState extends State<_TransferDialog> {
                 unitType: widget.item.baseUnit,
               );
               invalidateAfterInventoryChange(widget.ref);
-              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transfer completed successfully'), backgroundColor: Colors.green));
+              }
             } catch (e) {
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
             } finally {
@@ -514,6 +552,468 @@ class _TransferDialogState extends State<_TransferDialog> {
           },
           child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Transfer'),
         ),
+      ],
+    );
+  }
+}
+
+// --- Adjust Stock Dialog ---
+class _AdjustStockDialog extends StatefulWidget {
+  final WidgetRef ref;
+  final InventoryItem item;
+  const _AdjustStockDialog({required this.ref, required this.item});
+
+  @override
+  State<_AdjustStockDialog> createState() => _AdjustStockDialogState();
+}
+
+class _AdjustStockDialogState extends State<_AdjustStockDialog> {
+  int? _warehouse;
+  final _qtyController = TextEditingController();
+  final _reasonController = TextEditingController();
+  String _direction = 'in';
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final warehouses = widget.ref.read(warehouseListProvider);
+    return AlertDialog(
+      title: Text('Adjust Stock: ${widget.item.productName}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'in', label: Text('Add Stock'), icon: Icon(Icons.add_circle_outline)),
+                ButtonSegment(value: 'out', label: Text('Deduct Stock'), icon: Icon(Icons.remove_circle_outline)),
+              ],
+              selected: {_direction},
+              onSelectionChanged: (s) => setState(() => _direction = s.first),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              value: _warehouse,
+              decoration: const InputDecoration(labelText: 'Warehouse'),
+              items: warehouses.map((w) => DropdownMenuItem(value: w.warehouseId, child: Text(w.warehouseName))).toList(),
+              onChanged: (v) => setState(() => _warehouse = v),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _qtyController,
+              decoration: InputDecoration(labelText: 'Quantity (${widget.item.baseUnit})'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reasonController,
+              decoration: const InputDecoration(labelText: 'Reason / Notes'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: _direction == 'out' ? AppColors.error : AppColors.success),
+          onPressed: _loading ? null : () async {
+            if (_warehouse == null || _qtyController.text.isEmpty) return;
+            setState(() => _loading = true);
+            try {
+              final repo = widget.ref.read(inventoryRepositoryProvider);
+              await repo.adjustStock(
+                productId: widget.item.productId,
+                warehouseId: _warehouse!,
+                quantity: double.parse(_qtyController.text),
+                direction: _direction,
+                unitType: widget.item.baseUnit,
+                reason: _reasonController.text.isEmpty ? null : _reasonController.text,
+              );
+              invalidateAfterInventoryChange(widget.ref);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(_direction == 'in' ? 'Stock added successfully' : 'Stock deducted successfully'),
+                  backgroundColor: Colors.green,
+                ));
+              }
+            } catch (e) {
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+            } finally {
+              if (mounted) setState(() => _loading = false);
+            }
+          },
+          child: _loading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(_direction == 'in' ? 'Add Stock' : 'Deduct Stock'),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Add Stock Dialog ---
+class _AddStockDialog extends StatefulWidget {
+  final WidgetRef ref;
+  final InventoryItem item;
+  const _AddStockDialog({required this.ref, required this.item});
+
+  @override
+  State<_AddStockDialog> createState() => _AddStockDialogState();
+}
+
+class _AddStockDialogState extends State<_AddStockDialog> {
+  int? _warehouse;
+  final _qtyController = TextEditingController();
+  final _costController = TextEditingController();
+  final _notesController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final warehouses = widget.ref.read(warehouseListProvider);
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.add_circle, color: AppColors.success),
+          const SizedBox(width: 8),
+          Text('Add Stock: ${widget.item.productName}'),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<int>(
+              value: _warehouse,
+              decoration: const InputDecoration(labelText: 'Warehouse *'),
+              items: warehouses.map((w) => DropdownMenuItem(value: w.warehouseId, child: Text(w.warehouseName))).toList(),
+              onChanged: (v) => setState(() => _warehouse = v),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _qtyController,
+              decoration: InputDecoration(labelText: 'Quantity (${widget.item.baseUnit}) *'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _costController,
+              decoration: const InputDecoration(labelText: 'Cost per unit (EGP)'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _notesController,
+              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.add, size: 18),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+          onPressed: _loading ? null : () async {
+            if (_warehouse == null || _qtyController.text.isEmpty) return;
+            setState(() => _loading = true);
+            try {
+              final repo = widget.ref.read(inventoryRepositoryProvider);
+              await repo.adjustStock(
+                productId: widget.item.productId,
+                warehouseId: _warehouse!,
+                quantity: double.parse(_qtyController.text),
+                direction: 'in',
+                unitType: widget.item.baseUnit,
+                costPerUnit: double.tryParse(_costController.text) ?? 0,
+                reason: _notesController.text.isEmpty ? null : _notesController.text,
+              );
+              invalidateAfterInventoryChange(widget.ref);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock added successfully'), backgroundColor: Colors.green));
+              }
+            } catch (e) {
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+            } finally {
+              if (mounted) setState(() => _loading = false);
+            }
+          },
+          label: _loading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Add Stock'),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Deduct Stock Dialog ---
+class _DeductStockDialog extends StatefulWidget {
+  final WidgetRef ref;
+  final InventoryItem item;
+  const _DeductStockDialog({required this.ref, required this.item});
+
+  @override
+  State<_DeductStockDialog> createState() => _DeductStockDialogState();
+}
+
+class _DeductStockDialogState extends State<_DeductStockDialog> {
+  int? _warehouse;
+  final _qtyController = TextEditingController();
+  final _reasonController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final warehouses = widget.ref.read(warehouseListProvider);
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.remove_circle, color: AppColors.error),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Deduct Stock: ${widget.item.productName}')),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber, size: 18, color: AppColors.warning),
+                  const SizedBox(width: 8),
+                  Text('Current stock: ${widget.item.totalStock.toStringAsFixed(1)} ${widget.item.baseUnit}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              value: _warehouse,
+              decoration: const InputDecoration(labelText: 'From Warehouse *'),
+              items: warehouses.map((w) => DropdownMenuItem(value: w.warehouseId, child: Text(w.warehouseName))).toList(),
+              onChanged: (v) => setState(() => _warehouse = v),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _qtyController,
+              decoration: InputDecoration(labelText: 'Quantity to deduct (${widget.item.baseUnit}) *'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reasonController,
+              decoration: const InputDecoration(labelText: 'Reason (waste, damage, correction) *'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.remove, size: 18),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+          onPressed: _loading ? null : () async {
+            if (_warehouse == null || _qtyController.text.isEmpty || _reasonController.text.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields'), backgroundColor: Colors.orange));
+              return;
+            }
+            setState(() => _loading = true);
+            try {
+              final repo = widget.ref.read(inventoryRepositoryProvider);
+              await repo.adjustStock(
+                productId: widget.item.productId,
+                warehouseId: _warehouse!,
+                quantity: double.parse(_qtyController.text),
+                direction: 'out',
+                unitType: widget.item.baseUnit,
+                reason: _reasonController.text,
+              );
+              invalidateAfterInventoryChange(widget.ref);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock deducted successfully'), backgroundColor: Colors.green));
+              }
+            } catch (e) {
+              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+            } finally {
+              if (mounted) setState(() => _loading = false);
+            }
+          },
+          label: _loading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Deduct Stock'),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Stock History Dialog ---
+class _StockHistoryDialog extends StatefulWidget {
+  final WidgetRef ref;
+  final InventoryItem item;
+  const _StockHistoryDialog({required this.ref, required this.item});
+
+  @override
+  State<_StockHistoryDialog> createState() => _StockHistoryDialogState();
+}
+
+class _StockHistoryDialogState extends State<_StockHistoryDialog> {
+  String? _history;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final repo = widget.ref.read(inventoryRepositoryProvider);
+      final result = await repo.getStockHistory(widget.item.productId, widget.item.productName);
+      if (mounted) setState(() { _history = result; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _history = 'Error loading history: $e'; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.history, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text('History: ${widget.item.productName}', overflow: TextOverflow.ellipsis)),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        height: 400,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(_history ?? 'No history available', style: const TextStyle(fontSize: 13, height: 1.6)),
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+      ],
+    );
+  }
+}
+
+// --- Alerts Dialog ---
+class _AlertsDialog extends StatefulWidget {
+  final WidgetRef ref;
+  const _AlertsDialog({required this.ref});
+
+  @override
+  State<_AlertsDialog> createState() => _AlertsDialogState();
+}
+
+class _AlertsDialogState extends State<_AlertsDialog> {
+  List<Map<String, dynamic>>? _alerts;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAlerts();
+  }
+
+  Future<void> _loadAlerts() async {
+    try {
+      final repo = widget.ref.read(inventoryRepositoryProvider);
+      final alerts = await repo.getNotifications(unreadOnly: true);
+      if (mounted) setState(() { _alerts = alerts; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _alerts = []; _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.notifications_active, color: AppColors.warning),
+          SizedBox(width: 8),
+          Text('Inventory Alerts'),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        height: 400,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _alerts == null || _alerts!.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 48, color: AppColors.success),
+                        SizedBox(height: 12),
+                        Text('No active alerts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                        SizedBox(height: 4),
+                        Text('All inventory levels are within normal range', style: TextStyle(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _alerts!.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final alert = _alerts![i];
+                      final type = alert['notification_type']?.toString() ?? '';
+                      final message = alert['message']?.toString() ?? '';
+                      final createdAt = alert['created_at']?.toString() ?? '';
+
+                      IconData icon;
+                      Color color;
+                      if (type.contains('low_stock')) {
+                        icon = Icons.warning_amber;
+                        color = AppColors.warning;
+                      } else if (type.contains('out_of_stock')) {
+                        icon = Icons.error_outline;
+                        color = AppColors.error;
+                      } else if (type.contains('credit')) {
+                        icon = Icons.credit_card;
+                        color = AppColors.info;
+                      } else {
+                        icon = Icons.info_outline;
+                        color = AppColors.textSecondary;
+                      }
+
+                      return ListTile(
+                        leading: Icon(icon, color: color),
+                        title: Text(message, style: const TextStyle(fontSize: 13)),
+                        subtitle: Text(createdAt.length > 10 ? createdAt.substring(0, 10) : createdAt, style: const TextStyle(fontSize: 11)),
+                        dense: true,
+                      );
+                    },
+                  ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
       ],
     );
   }

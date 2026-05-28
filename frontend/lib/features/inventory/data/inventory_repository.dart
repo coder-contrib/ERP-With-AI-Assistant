@@ -131,6 +131,29 @@ class InventoryRepository {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> adjustStock({
+    required int productId,
+    required int warehouseId,
+    required double quantity,
+    required String direction,
+    required String unitType,
+    double costPerUnit = 0,
+    String? reason,
+  }) async {
+    final txType = direction == 'in' ? 'purchase' : 'waste';
+    final response = await _dio.post('/inventory/transactions', data: {
+      'product_id': productId,
+      'warehouse_id': warehouseId,
+      'transaction_type': txType,
+      'direction': direction,
+      'quantity': quantity,
+      'unit_type': unitType,
+      'cost_per_unit': costPerUnit,
+      'notes': reason,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getLowStockPrediction({int daysAhead = 7}) async {
     final response = await _dio.get('/ai/predict/low-stock', queryParameters: {'days_ahead': daysAhead});
     return response.data as Map<String, dynamic>;
@@ -142,6 +165,19 @@ class InventoryRepository {
       'message': message,
     });
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications({bool unreadOnly = false}) async {
+    final response = await _dio.get('/notifications', queryParameters: {'unread_only': unreadOnly});
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> getStockHistory(int productId, String productName) async {
+    final response = await _dio.post('/ai/chat', data: {
+      'session_id': 'inventory_history_$productId',
+      'message': 'Show me the recent stock movement history for product "$productName" (product ID: $productId). Include dates, quantities, and types.',
+    });
+    return response.data['response']?.toString() ?? 'No history available';
   }
 
   Future<void> refreshCache() async {
