@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # WhatsApp Integration (Meta Cloud API)
     whatsapp_api_token: str = ""
     whatsapp_phone_number_id: str = ""
+    whatsapp_owner_phone: str = ""
     whatsapp_can_send: bool = False
     whatsapp_can_bulk_message: bool = False
     whatsapp_max_messages_per_request: int = 50
