@@ -1,6 +1,6 @@
 import json
 from sqlalchemy.orm import Session
-from app.ai.agents.manager_agent import ManagerAgent
+from app.ai.agents.manager_agent import ManagerAgent, ALL_TOOL_SCHEMAS
 from typing import AsyncGenerator
 import logging
 
@@ -12,9 +12,10 @@ class ClaudeClient:
     Thin wrapper: routes messages to the Manager Agent.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_role: str = "ai_agent"):
         self.db = db
-        self.manager = ManagerAgent(db)
+        self.user_role = user_role
+        self.manager = ManagerAgent(db, user_role=user_role)
 
     def chat(self, session_id: str, user_message: str) -> str:
         return self.manager.chat(session_id, user_message)
@@ -28,7 +29,6 @@ class ClaudeClient:
         from app.ai.memory.conversation import ConversationMemory
         from app.ai.prompts.system_prompts import MANAGER_AGENT_PROMPT
         from app.ai.executor import ToolExecutor
-        from app.ai.tools.tool_schemas import TOOL_SCHEMAS
 
         memory = ConversationMemory(session_id)
         memory.add_user_message(user_message)
@@ -40,13 +40,13 @@ class ClaudeClient:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        executor = ToolExecutor(self.db)
+        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role)
 
         response = client.messages.create(
             model=settings.ai_model,
             max_tokens=4096,
             system=MANAGER_AGENT_PROMPT,
-            tools=TOOL_SCHEMAS,
+            tools=ALL_TOOL_SCHEMAS,
             messages=messages,
         )
 
@@ -70,7 +70,7 @@ class ClaudeClient:
                 model=settings.ai_model,
                 max_tokens=4096,
                 system=MANAGER_AGENT_PROMPT,
-                tools=TOOL_SCHEMAS,
+                tools=ALL_TOOL_SCHEMAS,
                 messages=messages,
             )
 
@@ -80,7 +80,7 @@ class ClaudeClient:
             model=settings.ai_model,
             max_tokens=4096,
             system=MANAGER_AGENT_PROMPT,
-            tools=TOOL_SCHEMAS,
+            tools=ALL_TOOL_SCHEMAS,
             messages=messages,
         ) as stream:
             for text in stream.text_stream:

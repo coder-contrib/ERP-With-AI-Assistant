@@ -51,8 +51,8 @@ async def voice_respond(
     # Step 1: Transcribe
     transcription = await voice_service.transcribe(audio_data, language)
 
-    # Step 2: Process through Claude
-    orchestrator = VoiceOrchestrator(db)
+    # Step 2: Process through Claude with user's actual role
+    orchestrator = VoiceOrchestrator(db, user_role=current_user.role)
     result = orchestrator.process_voice_message(session_id, transcription["text"])
 
     return VoiceRespondResponse(
@@ -78,8 +78,8 @@ async def voice_respond_audio(
     # Transcribe
     transcription = await voice_service.transcribe(audio_data, language)
 
-    # Process through Claude
-    orchestrator = VoiceOrchestrator(db)
+    # Process through Claude with user's actual role
+    orchestrator = VoiceOrchestrator(db, user_role=current_user.role)
     result = orchestrator.process_voice_message(session_id, transcription["text"])
 
     # Generate TTS
@@ -132,7 +132,7 @@ async def voice_chat_text(
     if not data.text:
         return {"error": "No text provided"}
 
-    orchestrator = VoiceOrchestrator(db)
+    orchestrator = VoiceOrchestrator(db, user_role=current_user.role)
     result = orchestrator.process_voice_message(data.session_id, data.text)
 
     # Generate audio

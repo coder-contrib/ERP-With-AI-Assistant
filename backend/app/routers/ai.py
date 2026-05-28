@@ -26,14 +26,14 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 def ai_chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    client = ClaudeClient(db)
+    client = ClaudeClient(db, user_role=current_user.role)
     response = client.chat(data.session_id, data.message)
     return {"response": response, "session_id": data.session_id}
 
 
 @router.post("/chat/stream")
 def ai_chat_stream(data: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    client = ClaudeClient(db)
+    client = ClaudeClient(db, user_role=current_user.role)
     return StreamingResponse(
         client.chat_stream(data.session_id, data.message),
         media_type="text/event-stream",
