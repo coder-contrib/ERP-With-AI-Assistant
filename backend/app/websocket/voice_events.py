@@ -23,7 +23,7 @@ class SessionState:
         return self.version
 
 
-async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session, user_role: str = "ai_agent"):
+async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Session, user_role: str = "ai_agent", token: str = ""):
     """Handle realtime voice WebSocket connection with live streaming and barge-in.
 
     Protocol:
@@ -54,6 +54,14 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
     stream_task = None
     ai_processing_task = None
     session = SessionState()
+
+    def _validate_token() -> bool:
+        """Re-validate JWT token. Returns False if expired."""
+        if not token:
+            return True
+        from app.core.security import decode_access_token
+        payload = decode_access_token(token)
+        return payload is not None
 
     async def cancel_all_active_tasks():
         """Cancel all in-progress tasks: AI processing, TTS, streaming relay."""
@@ -86,15 +94,37 @@ async def handle_voice_websocket(websocket: WebSocket, session_id: str, db: Sess
 
     async def process_and_respond(text: str, task_version: int, is_interrupted_followup: bool = False):
         """Process transcribed text through AI and send TTS response.
-        Checks session version before each send to abort if barge-in occurred.
+        Runs orchestrator in a background thread to keep event loop responsive.
+        Emits real-time tool_call events via callback.
         """
         try:
             if session.version != task_version:
                 return
 
-            result = orchestrator.process_voice_message(
+            # Validate token before processing
+            if not _validate_token():
+                await _send(websocket, "error", {
+                    "message": "انتهت صلاحية الجلسة. سجل دخول مرة تانية.",
+                    "code": "TOKEN_EXPIRED",
+                })
+                return
+
+            loop = asyncio.get_event_loop()
+
+            async def _emit_tool_event(tool_name, status):
+                if session.version != task_version:
+                    return
+                event_type = "tool_call_started" if status == "started" else "tool_call_finished"
+                await _send(websocket, event_type, {"tool": tool_name})
+
+            def tool_callback(tool_name, status):
+                asyncio.run_coroutine_threadsafe(_emit_tool_event(tool_name, status), loop)
+
+            result = await asyncio.to_thread(
+                orchestrator.process_voice_message,
                 session_id, text,
                 priority="high" if is_interrupted_followup else "normal",
+                on_tool_call=tool_callback,
             )
 
             if session.version != task_version:

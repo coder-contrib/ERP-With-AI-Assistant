@@ -157,7 +157,7 @@ async def voice_websocket_endpoint(
 ):
     """WebSocket endpoint for realtime voice interactions.
     Pass JWT token as ?token=<jwt> query param for authenticated access.
-    Without a valid token, falls back to ai_agent (read-only).
+    Token is re-validated before each AI processing to detect expiry.
     """
     user_role = "ai_agent"
     if token:
@@ -169,4 +169,4 @@ async def voice_websocket_endpoint(
                 user = db.query(User).filter(User.user_id == int(user_id)).first()
                 if user and user.active_status:
                     user_role = user.role
-    await handle_voice_websocket(websocket, session_id, db, user_role=user_role)
+    await handle_voice_websocket(websocket, session_id, db, user_role=user_role, token=token)

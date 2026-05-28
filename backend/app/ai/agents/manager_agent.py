@@ -35,12 +35,6 @@ class ManagerAgent:
     """Planner / Router ONLY.
     Uses Claude to understand user intent and decide which tools to call.
     Does NOT execute anything itself — passes decisions to the ToolExecutor.
-
-    Enhancements:
-    - Injects long-term vector memory context for entity queries
-    - Passes session_id + user_role to executor for safety scoping
-    - Handles confirmation flow for sensitive operations
-    - Full observability via executor audit trail
     """
 
     def __init__(self, db: Session, user_role: str = "ai_agent"):
@@ -50,7 +44,7 @@ class ManagerAgent:
         self.model = settings.ai_model
         self.vector_memory = VectorMemory()
 
-    def chat(self, session_id: str, user_message: str) -> str:
+    def chat(self, session_id: str, user_message: str, on_tool_call=None) -> str:
         memory = ConversationMemory(session_id)
         memory.add_user_message(user_message)
         history = memory.get_context_window(max_messages=20)
@@ -85,7 +79,11 @@ class ManagerAgent:
             for block in response.content:
                 if block.type == "tool_use":
                     logger.info(f"Manager planned: {block.name} (role={self.user_role})")
+                    if on_tool_call:
+                        on_tool_call(block.name, "started")
                     result = executor.execute(block.name, block.input)
+                    if on_tool_call:
+                        on_tool_call(block.name, "finished")
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

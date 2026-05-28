@@ -22,7 +22,7 @@ class ClaudeClient:
 
     async def chat_stream(self, session_id: str, user_message: str) -> AsyncGenerator[str, None]:
         """Streaming version. Tool calls execute synchronously,
-        only the final text response is streamed to the client.
+        the final text response is yielded to the client.
         """
         import anthropic
         from app.config import settings
@@ -57,6 +57,10 @@ class ClaudeClient:
                 if block.type == "tool_use":
                     yield json.dumps({"type": "tool_call", "tool": block.name}) + "\n"
                     result = executor.execute(block.name, block.input)
+                    try:
+                        memory.add_tool_result(block.name, json.loads(result))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -74,24 +78,12 @@ class ClaudeClient:
                 messages=messages,
             )
 
-        # Stream the final text response
+        # Yield final text directly from response (no redundant second API call)
         full_text = ""
-        with client.messages.stream(
-            model=settings.ai_model,
-            max_tokens=4096,
-            system=MANAGER_AGENT_PROMPT,
-            tools=ALL_TOOL_SCHEMAS,
-            messages=messages,
-        ) as stream:
-            for text in stream.text_stream:
-                full_text += text
-                yield json.dumps({"type": "token", "text": text}) + "\n"
-
-        if not full_text:
-            for block in response.content:
-                if hasattr(block, "text"):
-                    full_text += block.text
-                    yield json.dumps({"type": "token", "text": block.text}) + "\n"
+        for block in response.content:
+            if hasattr(block, "text"):
+                full_text += block.text
+                yield json.dumps({"type": "token", "text": block.text}) + "\n"
 
         memory.add_assistant_message(full_text)
         yield json.dumps({"type": "done", "full_text": full_text}) + "\n"

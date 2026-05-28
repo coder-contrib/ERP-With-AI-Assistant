@@ -15,7 +15,7 @@ class VoiceOrchestrator:
         self.user_role = user_role
         self.manager = ManagerAgent(db, user_role=user_role)
 
-    def process_voice_message(self, session_id: str, text: str, priority: str = "normal") -> dict:
+    def process_voice_message(self, session_id: str, text: str, priority: str = "normal", on_tool_call=None) -> dict:
         """Process a voice message through the Manager Agent.
 
         Args:
@@ -23,6 +23,7 @@ class VoiceOrchestrator:
             text: Transcribed user speech
             priority: "high" if this follows a barge-in (user interrupted AI),
                       "normal" otherwise.
+            on_tool_call: Optional callback(tool_name, status) for real-time tool events.
 
         Returns: {text: str, tools_used: list[str]}
         """
@@ -35,7 +36,7 @@ class VoiceOrchestrator:
             else:
                 prefixed_text = text
 
-            response = self.manager.chat(session_id, prefixed_text)
+            response = self.manager.chat(session_id, prefixed_text, on_tool_call=on_tool_call)
             return {
                 "text": response,
                 "tools_used": self._extract_tools_used(session_id),
