@@ -15,7 +15,7 @@ class ClaudeClient:
     def __init__(self, db: Session, user_role: str = "ai_agent"):
         self.db = db
         self.user_role = user_role
-        self.manager = ManagerAgent(db, user_role=user_role)
+        self.manager = ManagerAgent(db, user_role=user_role, channel="chat")
 
     def chat(self, session_id: str, user_message: str) -> str:
         return self.manager.chat(session_id, user_message)
@@ -40,7 +40,7 @@ class ClaudeClient:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role)
+        executor = ToolExecutor(self.db, session_id=session_id, user_role=self.user_role, channel="chat_stream")
 
         response = client.messages.create(
             model=settings.ai_model,

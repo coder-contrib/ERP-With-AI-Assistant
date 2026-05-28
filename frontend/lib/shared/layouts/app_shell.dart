@@ -62,9 +62,9 @@ class AppShell extends ConsumerWidget {
                       const Divider(height: 24),
                       _navItem(context, ref, '/voice-ai', Icons.record_voice_over_rounded, 'Voice AI', collapsed, highlight: true),
                       _navItem(context, ref, '/ai', Icons.smart_toy_rounded, 'AI Chat', collapsed),
-                      if (userRole == 'admin') ...[
-                        const Divider(height: 24),
+                      if (userRole == 'admin') ...[                        const Divider(height: 24),
                         _navItem(context, ref, '/ai-audit', Icons.admin_panel_settings_rounded, 'AI Audit', collapsed, highlight: true),
+                        _navItem(context, ref, '/ai-analytics', Icons.insights_rounded, 'AI Analytics', collapsed, highlight: true),
                       ],
                     ],
                   ),

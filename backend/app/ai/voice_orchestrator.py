@@ -13,7 +13,7 @@ class VoiceOrchestrator:
     def __init__(self, db: Session, user_role: str = "ai_agent"):
         self.db = db
         self.user_role = user_role
-        self.manager = ManagerAgent(db, user_role=user_role)
+        self.manager = ManagerAgent(db, user_role=user_role, channel="voice_ws")
 
     def process_voice_message(self, session_id: str, text: str, priority: str = "normal", on_tool_call=None) -> dict:
         """Process a voice message through the Manager Agent.
