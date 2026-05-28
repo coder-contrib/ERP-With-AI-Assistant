@@ -70,31 +70,36 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     );
   }
   void _sendReportToOwner(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
+    final reportType = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SimpleDialog(
         title: Row(
           children: [
             const Icon(Icons.chat, color: Color(0xFF25D366)),
             const SizedBox(width: 8),
-            const Text('Send Daily Report'),
+            const Text('Send Report via WhatsApp'),
           ],
         ),
-        content: const Text('Send today’s sales report to your WhatsApp?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Send', style: TextStyle(color: Colors.white)),
-          ),
+        children: [
+          _reportOption(ctx, 'daily_sales', 'Daily Sales', Icons.today),
+          _reportOption(ctx, 'monthly_profit', 'Monthly Profit', Icons.calendar_month),
+          _reportOption(ctx, 'profit_loss', 'Profit & Loss', Icons.account_balance),
+          _reportOption(ctx, 'cash_flow', 'Cash Flow', Icons.monetization_on),
+          _reportOption(ctx, 'top_products', 'Top Products', Icons.star),
+          _reportOption(ctx, 'inventory_valuation', 'Inventory Valuation', Icons.warehouse),
+          _reportOption(ctx, 'low_stock', 'Low Stock Alert', Icons.warning_amber),
+          _reportOption(ctx, 'dead_stock', 'Dead Stock', Icons.block),
+          _reportOption(ctx, 'stock_movement', 'Stock Movement', Icons.swap_vert),
+          _reportOption(ctx, 'customer_balances', 'Customer Balances', Icons.people),
+          _reportOption(ctx, 'supplier_balances', 'Supplier Balances', Icons.local_shipping),
+          _reportOption(ctx, 'expense_by_category', 'Expenses by Category', Icons.pie_chart),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (reportType == null || !mounted) return;
     try {
       final repo = ref.read(whatsappRepositoryProvider);
-      final result = await repo.sendReportToOwner();
+      final result = await repo.sendReportToOwner(reportType: reportType);
       if (result.containsKey('error')) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'])));
         return;
@@ -107,6 +112,19 @@ class _ReportsPageState extends ConsumerState<ReportsPage> with SingleTickerProv
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+  }
+
+  Widget _reportOption(BuildContext ctx, String type, String label, IconData icon) {
+    return SimpleDialogOption(
+      onPressed: () => Navigator.pop(ctx, type),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: const Color(0xFF25D366)),
+          const SizedBox(width: 12),
+          Text(label, style: const TextStyle(fontSize: 14)),
+        ],
+      ),
+    );
   }
 }
 
