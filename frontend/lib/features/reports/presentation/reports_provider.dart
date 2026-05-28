@@ -89,3 +89,13 @@ final reportsCustomerSegmentationProvider = FutureProvider<Map<String, dynamic>>
   final repo = ref.read(reportsRepositoryProvider);
   return repo.getCustomerSegmentation();
 });
+
+final reportsAiRiskAssessmentProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(reportsRepositoryProvider);
+  return repo.getAiRiskAssessment();
+});
+
+final reportsAiDailySummaryProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(reportsRepositoryProvider);
+  return repo.getAiDailySummary();
+});

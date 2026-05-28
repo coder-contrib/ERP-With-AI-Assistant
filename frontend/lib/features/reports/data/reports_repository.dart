@@ -147,4 +147,16 @@ class ReportsRepository {
     final response = await _dio.get('/reports/customer-segmentation');
     return response.data as Map<String, dynamic>;
   }
+
+  // === NEW: AI-POWERED REPORTS ===
+
+  Future<Map<String, dynamic>> getAiRiskAssessment() async {
+    final response = await _dio.get('/reports/ai-risk-assessment');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getAiDailySummary() async {
+    final response = await _dio.get('/reports/ai-daily-summary');
+    return response.data as Map<String, dynamic>;
+  }
 }
