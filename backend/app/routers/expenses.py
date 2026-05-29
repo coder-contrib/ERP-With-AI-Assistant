@@ -42,6 +42,16 @@ def list_expenses(
     return query.all()
 
 
+@router.post("/", response_model=ExpenseResponse, status_code=201)
+def create_expense(
+    data: ExpenseCreate,
+    current_user: User = Depends(require_permission("expenses:write")),
+    db: Session = Depends(get_db),
+):
+    service = ExpenseService(db)
+    return service.create(data)
+
+
 @router.get("/summary")
 def get_expense_summary(
     current_user: User = Depends(require_permission("expenses:read")),
