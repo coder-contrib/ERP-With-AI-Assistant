@@ -57,22 +57,19 @@ void printReportHtml({required String title, required String tableHtml}) {
   <title>$title</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 30px; color: #333; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1a73e8; padding-bottom: 15px; margin-bottom: 20px; }
-    .header h1 { font-size: 22px; color: #1a73e8; }
-    .header .meta { font-size: 12px; color: #666; text-align: right; }
-    .header .meta p { margin: 2px 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-    th { background: #f0f4ff; color: #1a73e8; font-weight: 600; padding: 10px 12px; border: 1px solid #ddd; text-align: left; }
-    td { padding: 8px 12px; border: 1px solid #eee; }
-    tr:nth-child(even) { background: #fafbff; }
-    tr:hover { background: #f0f4ff; }
-    .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 11px; color: #999; text-align: center; }
-    .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #333; border-left: 4px solid #1a73e8; padding-left: 10px; }
-    .badge-positive { background: #e6f4ea; color: #1e8e3e; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
-    .badge-negative { background: #fce8e6; color: #d93025; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 10px 15px; color: #000; font-size: 11px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+    .header h1 { font-size: 14px; color: #000; }
+    .header .meta { font-size: 9px; color: #333; text-align: right; }
+    .header .meta p { margin: 1px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; }
+    th { background: #eee; color: #000; font-weight: 600; padding: 4px 6px; border: 1px solid #999; text-align: left; }
+    td { padding: 3px 6px; border: 1px solid #ccc; }
+    tr:nth-child(even) { background: #f5f5f5; }
+    .footer { margin-top: 15px; padding-top: 8px; border-top: 1px solid #999; font-size: 8px; color: #666; text-align: center; }
+    .section-title { font-size: 11px; font-weight: 600; margin: 10px 0 4px; color: #000; border-left: 2px solid #000; padding-left: 6px; }
     @media print {
-      body { padding: 15px; }
+      body { padding: 5px 10px; }
       .no-print { display: none; }
     }
   </style>
@@ -82,11 +79,11 @@ void printReportHtml({required String title, required String tableHtml}) {
     <h1>$title</h1>
     <div class="meta">
       <p><strong>Ceramic Showroom ERP</strong></p>
-      <p>Generated: $dateStr</p>
+      <p>$dateStr</p>
     </div>
   </div>
   $tableHtml
-  <div class="footer">Ceramic Showroom ERP &mdash; Auto-generated report &mdash; $dateStr</div>
+  <div class="footer">Ceramic Showroom ERP &mdash; $dateStr</div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>
