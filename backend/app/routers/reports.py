@@ -136,6 +136,7 @@ def daily_operations_report(
             "total_in": total_in,
             "total_out": total_out,
             "net": net_cash,
+            "label": "Collected" if net_cash >= 0 else "Paid",
         },
     }
 
