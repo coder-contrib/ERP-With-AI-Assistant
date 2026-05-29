@@ -103,41 +103,39 @@ def daily_operations_report(
 
     return {
         "report": "daily_operations",
-        "date": d_str,
-        "data": {
-            "sales": {
-                "count": sales_count,
-                "total": float(sales_total),
-                "paid": float(sales_paid),
-                "cash": float(cash_sales),
-                "credit": float(credit_sales),
-                "items_sold": int(items_sold),
-            },
-            "purchases": {
-                "count": purch_count,
-                "total": float(purch_total),
-                "paid": float(purch_paid),
-            },
-            "expenses": {
-                "count": exp_count,
-                "total": float(exp_total),
-                "categories": [{"category": c or "Uncategorized", "amount": float(a)} for c, a in exp_cats],
-            },
-            "returns": {
-                "count": ret_count,
-                "total": float(ret_total),
-            },
-            "payments": {
-                "received": float(payments_in),
-                "made": float(payments_out),
-            },
-            "new_customers": new_customers,
-            "top_products": [{"name": n, "qty": int(q), "revenue": float(r)} for n, q, r in top_products],
-            "cash_position": {
-                "total_in": total_in,
-                "total_out": total_out,
-                "net": net_cash,
-            },
+        "report_date": d_str,
+        "sales": {
+            "count": sales_count,
+            "total": float(sales_total),
+            "paid": float(sales_paid),
+            "cash": float(cash_sales),
+            "credit": float(credit_sales),
+            "items_sold": int(items_sold),
+        },
+        "purchases": {
+            "count": purch_count,
+            "total": float(purch_total),
+            "paid": float(purch_paid),
+        },
+        "expenses": {
+            "count": exp_count,
+            "total": float(exp_total),
+            "categories": [{"category": c or "Uncategorized", "amount": float(a)} for c, a in exp_cats],
+        },
+        "returns": {
+            "count": ret_count,
+            "total": float(ret_total),
+        },
+        "payments": {
+            "received": float(payments_in),
+            "made": float(payments_out),
+        },
+        "new_customers": new_customers,
+        "top_products": [{"name": n, "quantity": int(q), "revenue": float(r)} for n, q, r in top_products],
+        "cash_position": {
+            "total_in": total_in,
+            "total_out": total_out,
+            "net": net_cash,
         },
     }
 
