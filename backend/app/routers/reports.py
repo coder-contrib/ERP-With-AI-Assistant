@@ -21,80 +21,80 @@ def daily_operations_report(
 
     # Sales
     sales_row = db.execute(sql_text("""
-        SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
-        FROM sales_invoices WHERE DATE(created_at) = :d
+        SELECT COUNT(invoice_id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+        FROM sales_invoices WHERE DATE(invoice_date) = :d
     """), {"d": d_str}).fetchone()
     sales_count, sales_total, sales_paid = sales_row if sales_row else (0, 0, 0)
 
     cash_sales = db.execute(sql_text("""
         SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
-        WHERE DATE(created_at) = :d AND invoice_type = 'cash'
+        WHERE DATE(invoice_date) = :d AND invoice_type = 'cash'
     """), {"d": d_str}).scalar() or 0
 
     credit_sales = db.execute(sql_text("""
         SELECT COALESCE(SUM(total_amount), 0) FROM sales_invoices
-        WHERE DATE(created_at) = :d AND invoice_type = 'credit'
+        WHERE DATE(invoice_date) = :d AND invoice_type = 'credit'
     """), {"d": d_str}).scalar() or 0
 
     items_sold = db.execute(sql_text("""
-        SELECT COALESCE(SUM(si.quantity), 0)
-        FROM sale_items si JOIN sales_invoices inv ON inv.id = si.invoice_id
-        WHERE DATE(inv.created_at) = :d
+        SELECT COALESCE(SUM(si.sold_quantity), 0)
+        FROM sales_invoice_items si JOIN sales_invoices inv ON inv.invoice_id = si.invoice_id
+        WHERE DATE(inv.invoice_date) = :d
     """), {"d": d_str}).scalar() or 0
 
     # Purchases
     purch_row = db.execute(sql_text("""
-        SELECT COUNT(id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
-        FROM purchase_invoices WHERE DATE(created_at) = :d
+        SELECT COUNT(purchase_invoice_id), COALESCE(SUM(total_amount), 0), COALESCE(SUM(paid_amount), 0)
+        FROM purchase_invoices WHERE DATE(purchase_date) = :d
     """), {"d": d_str}).fetchone()
     purch_count, purch_total, purch_paid = purch_row if purch_row else (0, 0, 0)
 
     # Expenses
     exp_row = db.execute(sql_text("""
-        SELECT COUNT(id), COALESCE(SUM(amount), 0)
+        SELECT COUNT(expense_id), COALESCE(SUM(amount), 0)
         FROM expenses WHERE DATE(expense_date) = :d
     """), {"d": d_str}).fetchone()
     exp_count, exp_total = exp_row if exp_row else (0, 0)
 
     # Expense categories
     exp_cats = db.execute(sql_text("""
-        SELECT category, SUM(amount) as total
+        SELECT expense_category, SUM(amount) as total
         FROM expenses WHERE DATE(expense_date) = :d
-        GROUP BY category ORDER BY total DESC
+        GROUP BY expense_category ORDER BY total DESC
     """), {"d": d_str}).fetchall()
 
     # Returns
     ret_row = db.execute(sql_text("""
-        SELECT COUNT(id), COALESCE(SUM(total_amount), 0)
-        FROM sales_invoices WHERE DATE(created_at) = :d AND status = 'cancelled'
+        SELECT COUNT(return_id), COALESCE(SUM(returned_amount), 0)
+        FROM sales_returns WHERE DATE(return_date) = :d
     """), {"d": d_str}).fetchone()
     ret_count, ret_total = ret_row if ret_row else (0, 0)
 
     # Payments received
     payments_in = db.execute(sql_text("""
-        SELECT COALESCE(SUM(amount), 0)
-        FROM payments WHERE DATE(created_at) = :d AND type = 'incoming'
+        SELECT COALESCE(SUM(payment_amount), 0)
+        FROM customer_payments WHERE DATE(payment_date) = :d
     """), {"d": d_str}).scalar() or 0
 
     # Payments made
     payments_out = db.execute(sql_text("""
-        SELECT COALESCE(SUM(amount), 0)
-        FROM payments WHERE DATE(created_at) = :d AND type = 'outgoing'
+        SELECT COALESCE(SUM(payment_amount), 0)
+        FROM supplier_payments WHERE DATE(payment_date) = :d
     """), {"d": d_str}).scalar() or 0
 
     # New customers
     new_customers = db.execute(sql_text("""
-        SELECT COUNT(id) FROM customers WHERE DATE(created_at) = :d
+        SELECT COUNT(customer_id) FROM customers WHERE DATE(created_date) = :d
     """), {"d": d_str}).scalar() or 0
 
     # Top sold products today
     top_products = db.execute(sql_text("""
-        SELECT p.name, SUM(si.quantity) as qty, SUM(si.total_price) as rev
-        FROM sale_items si
-        JOIN products p ON p.id = si.product_id
-        JOIN sales_invoices inv ON inv.id = si.invoice_id
-        WHERE DATE(inv.created_at) = :d
-        GROUP BY p.id, p.name ORDER BY rev DESC LIMIT 5
+        SELECT p.product_name, SUM(si.sold_quantity) as qty, SUM(si.total_price) as rev
+        FROM sales_invoice_items si
+        JOIN products p ON p.product_id = si.product_id
+        JOIN sales_invoices inv ON inv.invoice_id = si.invoice_id
+        WHERE DATE(inv.invoice_date) = :d
+        GROUP BY p.product_id, p.product_name ORDER BY rev DESC LIMIT 5
     """), {"d": d_str}).fetchall()
 
     total_in = float(sales_paid) + float(payments_in)
